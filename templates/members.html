@@ -1,24 +1,19 @@
 {% extends "base.html" %}
 {% block title %} — Members{% endblock %}
 {% block page_title %}Members{% endblock %}
-{% block page_sub %}View and adjust individual member points{% endblock %}
+{% block page_sub %}View, assign, and adjust member points{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('assignModal')">+ Assign Member</button>
+{% endblock %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <div><h3>All Members</h3><p>{{ users|length }} players assigned to houses</p></div>
+        <div><h3>All Members</h3><p>{{ users|length }} players assigned</p></div>
     </div>
     <div class="table-wrap">
         <table>
-            <thead>
-                <tr>
-                    <th>Rank</th>
-                    <th>User ID</th>
-                    <th>House</th>
-                    <th>Points</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
+            <thead><tr><th>Rank</th><th>User ID</th><th>House</th><th>Points</th><th>Actions</th></tr></thead>
             <tbody>
             {% for u in users %}
             <tr>
@@ -26,39 +21,78 @@
                     {% if loop.index == 1 %}<span class="rank gold">#1</span>
                     {% elif loop.index == 2 %}<span class="rank silver">#2</span>
                     {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
-                    {% else %}<span class="rank">#{{ loop.index }}</span>{% endif %}
+                    {% else %}<span class="rank default">#{{ loop.index }}</span>{% endif %}
                 </td>
                 <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ u.user_id }}</td>
                 <td><span class="badge badge-purple">{{ u.house|capitalize }}</span></td>
                 <td><strong id="mpts-{{ u.user_id }}">{{ u.points|int }}</strong></td>
                 <td>
-                    <div class="flex gap-10">
-                        <button class="btn btn-success btn-sm" onclick="openAdjust({{ u.user_id }}, 'add')">+ Add</button>
-                        <button class="btn btn-danger btn-sm" onclick="openAdjust({{ u.user_id }}, 'remove')">− Remove</button>
+                    <div class="flex gap-8">
+                        <button class="btn btn-success btn-sm" onclick="openMPts({{ u.user_id }},'add')">+ Add</button>
+                        <button class="btn btn-danger btn-sm" onclick="openMPts({{ u.user_id }},'remove')">− Remove</button>
+                        <button class="btn btn-ghost btn-sm" onclick="openMoveModal({{ u.user_id }}, '{{ u.house }}')">🔀 Move</button>
                     </div>
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:32px">
-                No members yet. Use <code>!assign</code> in Discord to assign players.
-            </td></tr>
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:32px">No members yet. Use <code>!assign</code> or the button above.</td></tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
-<div id="adjustModal" class="modal-overlay">
+<!-- Assign Modal -->
+<div id="assignModal" class="modal-overlay">
     <div class="modal">
-        <h3 id="adjustTitle">Adjust Points</h3>
-        <p id="adjustDesc">Enter the amount of points to adjust for this member.</p>
+        <h3>👤 Assign Member</h3>
+        <p>Assign a Discord user to a house. The DB is updated immediately; Discord role changes happen within a few seconds.</p>
         <div class="form-group">
-            <label>Amount</label>
-            <input type="number" id="adjustAmount" min="1" placeholder="e.g. 10">
+            <label>Discord User ID</label>
+            <input type="text" id="a_userid" placeholder="e.g. 1234567890123456789">
+            <p class="input-hint">Right-click a member in Discord → Copy User ID (enable Developer Mode)</p>
+        </div>
+        <div class="form-group">
+            <label>House</label>
+            <select id="a_house">
+                <option value="">Select a house…</option>
+                {% for h in houses %}<option value="{{ h.name }}">{{ h.name|capitalize }}</option>{% endfor %}
+            </select>
         </div>
         <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeModal('adjustModal')">Cancel</button>
-            <button class="btn btn-primary" onclick="submitAdjust()">Confirm</button>
+            <button class="btn btn-ghost" onclick="closeModal('assignModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="doAssign()">Assign</button>
+        </div>
+    </div>
+</div>
+
+<!-- Move Modal -->
+<div id="moveModal" class="modal-overlay">
+    <div class="modal">
+        <h3>🔀 Move Member</h3>
+        <p id="moveDesc">Move this member to a different house.</p>
+        <div class="form-group">
+            <label>New House</label>
+            <select id="m_house">
+                {% for h in houses %}<option value="{{ h.name }}">{{ h.name|capitalize }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('moveModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="doMove()">Move</button>
+        </div>
+    </div>
+</div>
+
+<!-- Points Modal -->
+<div id="mptsModal" class="modal-overlay">
+    <div class="modal">
+        <h3 id="mptsTitle">Adjust Points</h3>
+        <p>Adjusts this member's points and their house total.</p>
+        <div class="form-group"><label>Amount</label><input type="number" id="mptsAmount" min="1" placeholder="e.g. 10"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('mptsModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitMPts()">Confirm</button>
         </div>
     </div>
 </div>
@@ -66,34 +100,43 @@
 
 {% block scripts %}
 <script>
-let currentUserId = null;
-let currentAction = null;
+let curUser = null, curUserAction = null;
 
-function openAdjust(userId, action) {
-    currentUserId = userId;
-    currentAction = action;
-    document.getElementById('adjustTitle').textContent = action === 'add' ? '📈 Add Points' : '📉 Remove Points';
-    document.getElementById('adjustDesc').textContent = `Enter how many points to ${action} for user ${userId}.`;
-    document.getElementById('adjustAmount').value = '';
-    openModal('adjustModal');
+async function doAssign() {
+    const uid = document.getElementById('a_userid').value.trim();
+    const house = document.getElementById('a_house').value;
+    if (!uid || !house) return toast('Fill in all fields.', 'error');
+    const r = await fetch('/api/members/assign', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id: parseInt(uid), house_name: house})});
+    if (r.ok) { toast(`Assigned! Role changes apply within seconds.`); closeModal('assignModal'); setTimeout(()=>location.reload(),1000); }
+    else { const d = await r.json(); toast(d.error || 'Failed.', 'error'); }
 }
 
-async function submitAdjust() {
-    const amount = parseInt(document.getElementById('adjustAmount').value);
+function openMoveModal(uid, currentHouse) {
+    curUser = uid;
+    document.getElementById('moveDesc').textContent = `Move user ${uid} from ${currentHouse} to:`;
+    openModal('moveModal');
+}
+async function doMove() {
+    const house = document.getElementById('m_house').value;
+    if (!house) return toast('Select a house.', 'error');
+    const r = await fetch('/api/members/assign', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id: curUser, house_name: house})});
+    if (r.ok) { toast(`Moved! Role changes apply within seconds.`); closeModal('moveModal'); setTimeout(()=>location.reload(),1000); }
+    else toast('Failed.', 'error');
+}
+
+function openMPts(uid, action) {
+    curUser = uid; curUserAction = action;
+    document.getElementById('mptsTitle').textContent = action==='add' ? '📈 Add Points' : '📉 Remove Points';
+    document.getElementById('mptsAmount').value = '';
+    openModal('mptsModal');
+}
+async function submitMPts() {
+    const amount = parseInt(document.getElementById('mptsAmount').value);
     if (!amount || amount < 1) return toast('Enter a valid amount.', 'error');
-    const r = await fetch(`/api/members/${currentUserId}/points`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: currentAction, amount })
-    });
+    const r = await fetch(`/api/members/${curUser}/points`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:curUserAction,amount})});
     const data = await r.json();
-    if (r.ok) {
-        document.getElementById(`mpts-${currentUserId}`).textContent = data.points;
-        toast('Points updated!');
-        closeModal('adjustModal');
-    } else {
-        toast('Something went wrong.', 'error');
-    }
+    if (r.ok) { document.getElementById('mpts-'+curUser).textContent = data.points; toast('Points updated!'); closeModal('mptsModal'); }
+    else toast('Failed.', 'error');
 }
 </script>
 {% endblock %}

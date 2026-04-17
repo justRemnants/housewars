@@ -1,47 +1,50 @@
 {% extends "base.html" %}
 {% block title %} — Houses{% endblock %}
 {% block page_title %}Houses{% endblock %}
-{% block page_sub %}Manage house points and standings{% endblock %}
+{% block page_sub %}Manage houses, colours, and points{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('createModal')">+ New House</button>
+{% endblock %}
 
 {% block content %}
 <div class="card">
     <div class="card-header">
-        <div><h3>All Houses</h3><p>Click adjust to add or remove points</p></div>
+        <div><h3>All Houses</h3><p>Click a house to edit its colour and thumbnail</p></div>
     </div>
     <div class="table-wrap">
         <table>
-            <thead>
-                <tr>
-                    <th>Rank</th>
-                    <th>House</th>
-                    <th>Role ID</th>
-                    <th>Points</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="housesTable">
+            <thead><tr><th>Rank</th><th>House</th><th>Colour</th><th>Role ID</th><th>Points</th><th>Actions</th></tr></thead>
+            <tbody id="housesBody">
             {% for h in houses %}
-            <tr id="row-{{ h.name }}">
+            <tr id="hrow-{{ h.name }}">
                 <td>
                     {% if loop.index == 1 %}<span class="rank gold">#1</span>
                     {% elif loop.index == 2 %}<span class="rank silver">#2</span>
                     {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
-                    {% else %}<span class="rank">#{{ loop.index }}</span>{% endif %}
+                    {% else %}<span class="rank default">#{{ loop.index }}</span>{% endif %}
                 </td>
-                <td><strong>{{ h.name|capitalize }}</strong></td>
-                <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ h.role_id or '—' }}</td>
-                <td><span class="badge badge-gold" id="pts-{{ h.name }}">{{ h.points|int }}</span></td>
                 <td>
-                    <div class="flex gap-10">
-                        <button class="btn btn-success btn-sm" onclick="openAdjust('{{ h.name }}', 'add')">+ Add</button>
-                        <button class="btn btn-danger btn-sm" onclick="openAdjust('{{ h.name }}', 'remove')">− Remove</button>
-                        <button class="btn btn-ghost btn-sm" onclick="openReset('{{ h.name }}')">Reset</button>
+                    <div class="flex items-center gap-8">
+                        <span class="color-dot" id="cdot-{{ h.name }}" style="background:#{{ h.color or '5865f2' }}"></span>
+                        <strong>{{ h.name|capitalize }}</strong>
+                    </div>
+                </td>
+                <td><code id="cval-{{ h.name }}">#{{ h.color or '5865f2' }}</code></td>
+                <td style="color:var(--muted);font-family:monospace;font-size:12px">{{ h.role_id or '—' }}</td>
+                <td><span class="badge badge-gold" id="hpts-{{ h.name }}">{{ h.points|int }}</span></td>
+                <td>
+                    <div class="flex gap-8">
+                        <button class="btn btn-ghost btn-sm" onclick="openEdit('{{ h.name }}','{{ h.color or '5865f2' }}','{{ h.thumbnail_url or '' }}','{{ h.role_id or '' }}')">✏️ Edit</button>
+                        <button class="btn btn-success btn-sm" onclick="openPts('{{ h.name }}','add')">+</button>
+                        <button class="btn btn-danger btn-sm" onclick="openPts('{{ h.name }}','remove')">−</button>
+                        <button class="btn btn-warning btn-sm" onclick="openResetHouse('{{ h.name }}')">↺</button>
+                        <button class="btn btn-danger btn-sm" onclick="openDeleteHouse('{{ h.name }}')">🗑</button>
                     </div>
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:32px">
-                No houses yet. Use <code>!sethouse</code> in Discord to create one.
+            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:32px">
+                No houses yet. Use the button above or <code>!sethouse</code> in Discord.
             </td></tr>
             {% endfor %}
             </tbody>
@@ -49,28 +52,86 @@
     </div>
 </div>
 
-<div id="adjustModal" class="modal-overlay">
+<!-- Create Modal -->
+<div id="createModal" class="modal-overlay">
     <div class="modal">
-        <h3 id="adjustTitle">Adjust Points</h3>
-        <p id="adjustDesc">Enter the amount of points to adjust.</p>
-        <div class="form-group">
-            <label>Amount</label>
-            <input type="number" id="adjustAmount" min="1" placeholder="e.g. 50">
+        <h3>🏠 New House</h3>
+        <p>Create a house and link it to a Discord role.</p>
+        <div class="form-group"><label>House Name</label><input type="text" id="c_name" placeholder="e.g. Phoenix"></div>
+        <div class="form-group"><label>Discord Role ID</label><input type="text" id="c_role" placeholder="e.g. 1234567890123456789"><p class="input-hint">Right-click the role in Discord → Copy Role ID (enable Developer Mode first)</p></div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>House Colour</label>
+                <div class="flex gap-8 items-center">
+                    <input type="color" id="c_color_picker" value="#5865f2" style="width:48px;flex-shrink:0">
+                    <input type="text" id="c_color_hex" placeholder="#5865f2">
+                </div>
+            </div>
+            <div class="form-group"><label>Thumbnail URL</label><input type="text" id="c_thumb" placeholder="https://..."></div>
         </div>
         <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeModal('adjustModal')">Cancel</button>
-            <button class="btn btn-primary" onclick="submitAdjust()">Confirm</button>
+            <button class="btn btn-ghost" onclick="closeModal('createModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="createHouse()">Create House</button>
         </div>
     </div>
 </div>
 
-<div id="resetModal" class="modal-overlay">
+<!-- Edit Modal -->
+<div id="editModal" class="modal-overlay">
     <div class="modal">
-        <h3>Reset House Points</h3>
-        <p id="resetDesc">This will set all points to 0 for this house and its members.</p>
+        <h3 id="editTitle">Edit House</h3>
+        <p>Update appearance and settings.</p>
+        <div class="form-row">
+            <div class="form-group">
+                <label>House Colour</label>
+                <div class="flex gap-8 items-center">
+                    <input type="color" id="e_color_picker" style="width:48px;flex-shrink:0">
+                    <input type="text" id="e_color_hex">
+                </div>
+            </div>
+            <div class="form-group"><label>Role ID</label><input type="text" id="e_role" placeholder="Discord Role ID"></div>
+        </div>
+        <div class="form-group"><label>Thumbnail URL (overrides global)</label><input type="text" id="e_thumb" placeholder="https://..."></div>
         <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeModal('resetModal')">Cancel</button>
-            <button class="btn btn-danger" onclick="submitReset()">Reset</button>
+            <button class="btn btn-ghost" onclick="closeModal('editModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- Points Modal -->
+<div id="ptsModal" class="modal-overlay">
+    <div class="modal">
+        <h3 id="ptsTitle">Adjust Points</h3>
+        <p id="ptsDesc">Adjust points for this house and all its members.</p>
+        <div class="form-group"><label>Amount</label><input type="number" id="ptsAmount" min="1" placeholder="e.g. 50"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('ptsModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitPts()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Modal -->
+<div id="resetHouseModal" class="modal-overlay">
+    <div class="modal">
+        <h3>↺ Reset House</h3>
+        <p id="resetHouseDesc">Set all points for this house and its members to 0?</p>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('resetHouseModal')">Cancel</button>
+            <button class="btn btn-danger" onclick="doResetHouse()">Reset</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Modal -->
+<div id="deleteHouseModal" class="modal-overlay">
+    <div class="modal">
+        <h3>🗑 Delete House</h3>
+        <p id="deleteHouseDesc">This will permanently delete the house from the database. Members will remain but lose their house assignment.</p>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('deleteHouseModal')">Cancel</button>
+            <button class="btn btn-danger" onclick="doDeleteHouse()">Delete</button>
         </div>
     </div>
 </div>
@@ -78,51 +139,75 @@
 
 {% block scripts %}
 <script>
-let currentHouse = null;
-let currentAction = null;
+let curHouse = null, curAction = null;
 
-function openAdjust(house, action) {
-    currentHouse = house;
-    currentAction = action;
-    document.getElementById('adjustTitle').textContent = (action === 'add' ? '📈 Add Points to ' : '📉 Remove Points from ') + house.charAt(0).toUpperCase() + house.slice(1);
-    document.getElementById('adjustDesc').textContent = action === 'add' ? 'Points will be added to the house and all its members.' : 'Points will be removed from the house and all its members.';
-    document.getElementById('adjustAmount').value = '';
-    openModal('adjustModal');
+document.getElementById('c_color_picker').addEventListener('input', e => { document.getElementById('c_color_hex').value = e.target.value; });
+document.getElementById('c_color_hex').addEventListener('input', e => { if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)) document.getElementById('c_color_picker').value = e.target.value; });
+document.getElementById('e_color_picker').addEventListener('input', e => { document.getElementById('e_color_hex').value = e.target.value; });
+document.getElementById('e_color_hex').addEventListener('input', e => { if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)) document.getElementById('e_color_picker').value = e.target.value; });
+
+async function createHouse() {
+    const name = document.getElementById('c_name').value.trim();
+    if (!name) return toast('Enter a house name.', 'error');
+    const color = document.getElementById('c_color_hex').value || document.getElementById('c_color_picker').value;
+    const r = await fetch('/api/houses', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
+        name, role_id: document.getElementById('c_role').value || null,
+        color: color.replace('#',''), thumbnail_url: document.getElementById('c_thumb').value
+    })});
+    if (r.ok) { toast(`House "${name}" created!`); closeModal('createModal'); setTimeout(()=>location.reload(),800); }
+    else toast('Failed to create house.', 'error');
 }
 
-async function submitAdjust() {
-    const amount = parseInt(document.getElementById('adjustAmount').value);
+function openEdit(name, color, thumb, roleId) {
+    curHouse = name;
+    document.getElementById('editTitle').textContent = `Edit ${name.charAt(0).toUpperCase()+name.slice(1)}`;
+    const hex = '#' + color.replace('#','');
+    document.getElementById('e_color_picker').value = hex;
+    document.getElementById('e_color_hex').value = hex;
+    document.getElementById('e_thumb').value = thumb;
+    document.getElementById('e_role').value = roleId;
+    openModal('editModal');
+}
+async function saveEdit() {
+    const color = document.getElementById('e_color_hex').value || document.getElementById('e_color_picker').value;
+    const r = await fetch(`/api/houses/${curHouse}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
+        color: color.replace('#',''), thumbnail_url: document.getElementById('e_thumb').value, role_id: document.getElementById('e_role').value || null
+    })});
+    if (r.ok) {
+        const hex = color.startsWith('#') ? color : '#'+color;
+        document.getElementById('cdot-'+curHouse).style.background = hex;
+        document.getElementById('cval-'+curHouse).textContent = hex;
+        toast('House updated!'); closeModal('editModal');
+    } else toast('Failed.', 'error');
+}
+
+function openPts(house, action) {
+    curHouse = house; curAction = action;
+    document.getElementById('ptsTitle').textContent = action==='add' ? '📈 Add Points' : '📉 Remove Points';
+    document.getElementById('ptsDesc').textContent = `${action==='add'?'Add':'Remove'} points for ${house.charAt(0).toUpperCase()+house.slice(1)} and all its members.`;
+    document.getElementById('ptsAmount').value = '';
+    openModal('ptsModal');
+}
+async function submitPts() {
+    const amount = parseInt(document.getElementById('ptsAmount').value);
     if (!amount || amount < 1) return toast('Enter a valid amount.', 'error');
-    const r = await fetch(`/api/houses/${currentHouse}/points`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ action: currentAction, amount })
-    });
+    const r = await fetch(`/api/houses/${curHouse}/points`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:curAction,amount})});
     const data = await r.json();
-    if (r.ok) {
-        document.getElementById(`pts-${currentHouse}`).textContent = data.points;
-        toast(`Points updated for ${currentHouse}!`);
-        closeModal('adjustModal');
-    } else {
-        toast('Something went wrong.', 'error');
-    }
+    if (r.ok) { document.getElementById('hpts-'+curHouse).textContent = data.points; toast('Points updated!'); closeModal('ptsModal'); }
+    else toast('Failed.', 'error');
 }
 
-function openReset(house) {
-    currentHouse = house;
-    document.getElementById('resetDesc').textContent = `Reset all points for ${house.charAt(0).toUpperCase() + house.slice(1)} to 0?`;
-    openModal('resetModal');
+function openResetHouse(name) { curHouse=name; document.getElementById('resetHouseDesc').textContent=`Reset all points for ${name.charAt(0).toUpperCase()+name.slice(1)}?`; openModal('resetHouseModal'); }
+async function doResetHouse() {
+    const r = await fetch(`/api/houses/${curHouse}/reset`, {method:'POST'});
+    if(r.ok){document.getElementById('hpts-'+curHouse).textContent='0'; toast('Points reset!'); closeModal('resetHouseModal');}
+    else toast('Failed.','error');
 }
-
-async function submitReset() {
-    const r = await fetch(`/api/houses/${currentHouse}/reset`, { method: 'POST' });
-    if (r.ok) {
-        document.getElementById(`pts-${currentHouse}`).textContent = '0';
-        toast(`${currentHouse} points reset!`);
-        closeModal('resetModal');
-    } else {
-        toast('Something went wrong.', 'error');
-    }
+function openDeleteHouse(name) { curHouse=name; document.getElementById('deleteHouseDesc').textContent=`Delete house "${name}"? This cannot be undone.`; openModal('deleteHouseModal'); }
+async function doDeleteHouse() {
+    const r = await fetch(`/api/houses/${curHouse}`, {method:'DELETE'});
+    if(r.ok){toast(`${curHouse} deleted!`); closeModal('deleteHouseModal'); setTimeout(()=>location.reload(),800);}
+    else toast('Failed.','error');
 }
 </script>
 {% endblock %}

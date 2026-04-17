@@ -81,7 +81,12 @@
                         {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
                         {% else %}<span class="rank">#{{ loop.index }}</span>{% endif %}
                     </td>
-                    <td><strong>{{ h.name|capitalize }}</strong></td>
+                    <td>
+                        <div class="flex items-center gap-8">
+                            <span class="color-dot" style="background:#{{ h.color or '5865f2' }}"></span>
+                            <strong>{{ h.name|capitalize }}</strong>
+                        </div>
+                    </td>
                     <td><span class="badge badge-gold">{{ h.points|int }}</span></td>
                 </tr>
                 {% else %}
