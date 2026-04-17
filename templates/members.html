@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %} — Members{% endblock %}
+{% block page_title %}Members{% endblock %}
+{% block page_sub %}View and adjust individual member points{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div><h3>All Members</h3><p>{{ users|length }} players assigned to houses</p></div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>User ID</th>
+                    <th>House</th>
+                    <th>Points</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for u in users %}
+            <tr>
+                <td>
+                    {% if loop.index == 1 %}<span class="rank gold">#1</span>
+                    {% elif loop.index == 2 %}<span class="rank silver">#2</span>
+                    {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
+                    {% else %}<span class="rank">#{{ loop.index }}</span>{% endif %}
+                </td>
+                <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ u.user_id }}</td>
+                <td><span class="badge badge-purple">{{ u.house|capitalize }}</span></td>
+                <td><strong id="mpts-{{ u.user_id }}">{{ u.points|int }}</strong></td>
+                <td>
+                    <div class="flex gap-10">
+                        <button class="btn btn-success btn-sm" onclick="openAdjust({{ u.user_id }}, 'add')">+ Add</button>
+                        <button class="btn btn-danger btn-sm" onclick="openAdjust({{ u.user_id }}, 'remove')">− Remove</button>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:32px">
+                No members yet. Use <code>!assign</code> in Discord to assign players.
+            </td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="adjustModal" class="modal-overlay">
+    <div class="modal">
+        <h3 id="adjustTitle">Adjust Points</h3>
+        <p id="adjustDesc">Enter the amount of points to adjust for this member.</p>
+        <div class="form-group">
+            <label>Amount</label>
+            <input type="number" id="adjustAmount" min="1" placeholder="e.g. 10">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('adjustModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitAdjust()">Confirm</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentUserId = null;
+let currentAction = null;
+
+function openAdjust(userId, action) {
+    currentUserId = userId;
+    currentAction = action;
+    document.getElementById('adjustTitle').textContent = action === 'add' ? '📈 Add Points' : '📉 Remove Points';
+    document.getElementById('adjustDesc').textContent = `Enter how many points to ${action} for user ${userId}.`;
+    document.getElementById('adjustAmount').value = '';
+    openModal('adjustModal');
+}
+
+async function submitAdjust() {
+    const amount = parseInt(document.getElementById('adjustAmount').value);
+    if (!amount || amount < 1) return toast('Enter a valid amount.', 'error');
+    const r = await fetch(`/api/members/${currentUserId}/points`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: currentAction, amount })
+    });
+    const data = await r.json();
+    if (r.ok) {
+        document.getElementById(`mpts-${currentUserId}`).textContent = data.points;
+        toast('Points updated!');
+        closeModal('adjustModal');
+    } else {
+        toast('Something went wrong.', 'error');
+    }
+}
+</script>
+{% endblock %}

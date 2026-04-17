@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %} — Settings{% endblock %}
+{% block page_title %}Embed Settings{% endblock %}
+{% block page_sub %}Customise how the bot's embeds look in Discord{% endblock %}
+
+{% block head %}
+<style>
+.preview-card {
+    background: #2b2d31;
+    border-left: 4px solid #5865f2;
+    border-radius: 4px;
+    padding: 16px;
+    font-family: 'Whitney', 'Inter', sans-serif;
+    max-width: 440px;
+    position: relative;
+}
+.preview-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.preview-author-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #5865f2;
+    object-fit: cover;
+}
+.preview-author { font-size: 13px; font-weight: 600; color: #e3e5e8; }
+.preview-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.preview-desc { font-size: 14px; color: #dbdee1; line-height: 1.5; }
+.preview-thumbnail {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 60px;
+    height: 60px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: #404249;
+}
+.preview-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #3f4248;
+}
+.preview-footer-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #5865f2;
+}
+.preview-footer-text { font-size: 12px; color: #949ba4; }
+.section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <div><h3>🎨 Embed Appearance</h3><p>These settings affect all bot messages</p></div>
+            </div>
+
+            <div class="form-group">
+                <label>Accent Colour</label>
+                <div class="flex gap-10 items-center">
+                    <input type="color" id="embed_color" value="#5865f2" style="width:60px;flex-shrink:0">
+                    <input type="text" id="embed_color_hex" placeholder="#5865f2" style="flex:1">
+                </div>
+                <small style="color:var(--muted);font-size:12px;display:block;margin-top:4px">This is the left border colour of the embed</small>
+            </div>
+
+            <div class="form-group">
+                <label>Footer Text</label>
+                <input type="text" id="embed_footer_text" placeholder="e.g. Ice Dodo | No Cap">
+            </div>
+
+            <div class="form-group">
+                <label>Footer Icon URL</label>
+                <input type="text" id="embed_footer_icon" placeholder="https://your-icon-url.com/icon.png">
+                <small style="color:var(--muted);font-size:12px;display:block;margin-top:4px">Use a direct image link (PNG, JPG, GIF)</small>
+            </div>
+
+            <div class="form-group">
+                <label>Thumbnail URL</label>
+                <input type="text" id="embed_thumbnail" placeholder="https://your-image-url.com/thumb.png">
+                <small style="color:var(--muted);font-size:12px;display:block;margin-top:4px">Small image shown in the top-right of every embed</small>
+            </div>
+
+            <div class="form-group">
+                <label>Author Name</label>
+                <input type="text" id="embed_author_name" placeholder="e.g. Ice Dodo Bot">
+            </div>
+
+            <div class="form-group">
+                <label>Author Icon URL</label>
+                <input type="text" id="embed_author_icon" placeholder="https://your-icon-url.com/author.png">
+            </div>
+
+            <button class="btn btn-primary" onclick="saveConfig()" style="width:100%;margin-top:8px">Save Settings</button>
+        </div>
+
+        <div class="card mt-24">
+            <div class="card-header">
+                <div><h3>📋 How to Customise</h3></div>
+            </div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.8">
+                <p><strong style="color:var(--text)">Accent Colour</strong> — The vertical bar on the left of each embed. Pick any hex colour.</p>
+                <p style="margin-top:10px"><strong style="color:var(--text)">Footer Text</strong> — Small text at the bottom of every embed. Great for server name or tagline.</p>
+                <p style="margin-top:10px"><strong style="color:var(--text)">Footer Icon</strong> — A tiny circular image next to the footer text. Use your server icon URL.</p>
+                <p style="margin-top:10px"><strong style="color:var(--text)">Thumbnail</strong> — Image in the top-right corner of embeds. Use your server logo.</p>
+                <p style="margin-top:10px"><strong style="color:var(--text)">Author</strong> — Line shown above the embed title. Good for branding.</p>
+                <p style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+                    To get your Discord server icon URL: right-click the icon in Discord → <em>Copy Link</em>.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <div><h3>👁 Live Preview</h3><p>Updates as you type</p></div>
+            </div>
+            <div id="previewWrapper">
+                <div class="preview-card" id="previewCard">
+                    <div class="preview-header" id="previewHeader" style="display:none">
+                        <img class="preview-author-icon" id="previewAuthorIcon" src="" alt="">
+                        <span class="preview-author" id="previewAuthorName"></span>
+                    </div>
+                    <div class="preview-title">📈 Points Added</div>
+                    <div class="preview-desc">@Player earned <strong>+50</strong> points for <strong>House Alpha</strong>.</div>
+                    <img class="preview-thumbnail" id="previewThumb" src="" alt="" style="display:none">
+                    <div class="preview-footer" id="previewFooter">
+                        <img class="preview-footer-icon" id="previewFooterIcon" src="" alt="" style="display:none">
+                        <span class="preview-footer-text" id="previewFooterText">Ice Dodo | No Cap</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+                <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Preview examples:</p>
+                <div class="flex gap-10">
+                    <button class="btn btn-ghost btn-sm" onclick="setPreviewExample('points')">Points Embed</button>
+                    <button class="btn btn-ghost btn-sm" onclick="setPreviewExample('assign')">Assign Embed</button>
+                    <button class="btn btn-ghost btn-sm" onclick="setPreviewExample('board')">Leaderboard</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const examples = {
+    points: { title: '📈 Points Added', desc: '@Player earned <strong>+50</strong> points for <strong>House Alpha</strong>.' },
+    assign: { title: '✅ Player Assigned', desc: '@Player has been placed in <strong>House Alpha</strong>.' },
+    board: { title: '🏆 House Leaderboard', desc: '🥇 <strong>Alpha</strong> — 350 points\n🥈 <strong>Beta</strong> — 210 points\n🥉 <strong>Gamma</strong> — 90 points' }
+};
+let currentExample = 'points';
+
+function setPreviewExample(type) {
+    currentExample = type;
+    updatePreview();
+}
+
+function hexToInt(hex) {
+    return parseInt(hex.replace('#', ''), 16);
+}
+
+function updatePreview() {
+    const color = document.getElementById('embed_color').value || '#5865f2';
+    const footerText = document.getElementById('embed_footer_text').value || 'Ice Dodo | No Cap';
+    const footerIcon = document.getElementById('embed_footer_icon').value;
+    const thumbnail = document.getElementById('embed_thumbnail').value;
+    const authorName = document.getElementById('embed_author_name').value;
+    const authorIcon = document.getElementById('embed_author_icon').value;
+
+    document.getElementById('previewCard').style.borderLeftColor = color;
+
+    document.getElementById('previewFooterText').textContent = footerText;
+
+    const footerIconEl = document.getElementById('previewFooterIcon');
+    if (footerIcon) { footerIconEl.src = footerIcon; footerIconEl.style.display = 'block'; }
+    else footerIconEl.style.display = 'none';
+
+    const thumbEl = document.getElementById('previewThumb');
+    if (thumbnail) { thumbEl.src = thumbnail; thumbEl.style.display = 'block'; }
+    else thumbEl.style.display = 'none';
+
+    const headerEl = document.getElementById('previewHeader');
+    if (authorName) {
+        headerEl.style.display = 'flex';
+        document.getElementById('previewAuthorName').textContent = authorName;
+        const authorIconEl = document.getElementById('previewAuthorIcon');
+        if (authorIcon) { authorIconEl.src = authorIcon; }
+    } else {
+        headerEl.style.display = 'none';
+    }
+
+    const ex = examples[currentExample];
+    document.querySelector('.preview-title').textContent = ex.title;
+    document.querySelector('.preview-desc').innerHTML = ex.desc.replace(/\n/g, '<br>');
+
+    document.getElementById('embed_color_hex').value = color;
+}
+
+document.getElementById('embed_color').addEventListener('input', () => {
+    document.getElementById('embed_color_hex').value = document.getElementById('embed_color').value;
+    updatePreview();
+});
+document.getElementById('embed_color_hex').addEventListener('input', () => {
+    const v = document.getElementById('embed_color_hex').value;
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById('embed_color').value = v;
+    updatePreview();
+});
+['embed_footer_text','embed_footer_icon','embed_thumbnail','embed_author_name','embed_author_icon'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updatePreview);
+});
+
+async function loadConfig() {
+    const r = await fetch('/api/embed-config');
+    const data = await r.json();
+    if (data.embed_color) {
+        const hex = '#' + parseInt(data.embed_color).toString(16).padStart(6, '0');
+        document.getElementById('embed_color').value = hex;
+        document.getElementById('embed_color_hex').value = hex;
+    }
+    if (data.embed_footer_text) document.getElementById('embed_footer_text').value = data.embed_footer_text;
+    if (data.embed_footer_icon) document.getElementById('embed_footer_icon').value = data.embed_footer_icon;
+    if (data.embed_thumbnail) document.getElementById('embed_thumbnail').value = data.embed_thumbnail;
+    if (data.embed_author_name) document.getElementById('embed_author_name').value = data.embed_author_name;
+    if (data.embed_author_icon) document.getElementById('embed_author_icon').value = data.embed_author_icon;
+    updatePreview();
+}
+
+async function saveConfig() {
+    const color = document.getElementById('embed_color').value;
+    const colorInt = parseInt(color.replace('#', ''), 16).toString();
+    const payload = {
+        embed_color: colorInt,
+        embed_footer_text: document.getElementById('embed_footer_text').value,
+        embed_footer_icon: document.getElementById('embed_footer_icon').value,
+        embed_thumbnail: document.getElementById('embed_thumbnail').value,
+        embed_author_name: document.getElementById('embed_author_name').value,
+        embed_author_icon: document.getElementById('embed_author_icon').value
+    };
+    const r = await fetch('/api/embed-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (r.ok) toast('Embed settings saved! Restart the bot to apply.');
+    else toast('Failed to save settings.', 'error');
+}
+
+loadConfig();
+</script>
+{% endblock %}

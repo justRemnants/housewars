@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %} — Overview{% endblock %}
+{% block page_title %}Overview{% endblock %}
+{% block page_sub %}Your server at a glance{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-danger btn-sm" onclick="openModal('resetModal')">🔄 Reset Season</button>
+{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="label">Total Houses</div>
+        <div class="value">{{ houses|length }}</div>
+        <div class="sub">Active houses</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Total Members</div>
+        <div class="value">{{ users|length }}</div>
+        <div class="sub">Assigned players</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Total Points</div>
+        <div class="value">{{ users|sum(attribute='points')|int }}</div>
+        <div class="sub">Across all houses</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">Leading House</div>
+        <div class="value" style="font-size:18px;">{% if houses %}{{ houses[0].name|capitalize }}{% else %}—{% endif %}</div>
+        <div class="sub">{% if houses %}{{ houses[0].points|int }} points{% else %}No data{% endif %}</div>
+    </div>
+</div>
+
+{% if houses|length >= 2 %}
+<div class="card mt-24">
+    <div class="card-header">
+        <div><h3>🏆 House Standings</h3><p>Visual leaderboard</p></div>
+    </div>
+    <div class="podium">
+        {% set sorted = houses|sort(attribute='points', reverse=True) %}
+        {% if sorted|length >= 2 %}
+        <div class="podium-item">
+            <div class="podium-bar second">🥈</div>
+            <div class="podium-name">{{ sorted[1].name|capitalize }}</div>
+            <div class="podium-pts">{{ sorted[1].points|int }} pts</div>
+        </div>
+        {% endif %}
+        {% if sorted|length >= 1 %}
+        <div class="podium-item">
+            <div class="podium-bar first">🥇</div>
+            <div class="podium-name">{{ sorted[0].name|capitalize }}</div>
+            <div class="podium-pts">{{ sorted[0].points|int }} pts</div>
+        </div>
+        {% endif %}
+        {% if sorted|length >= 3 %}
+        <div class="podium-item">
+            <div class="podium-bar third">🥉</div>
+            <div class="podium-name">{{ sorted[2].name|capitalize }}</div>
+            <div class="podium-pts">{{ sorted[2].points|int }} pts</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div class="grid-2 mt-24">
+    <div class="card">
+        <div class="card-header">
+            <div><h3>🏠 Houses</h3><p>Points breakdown</p></div>
+            <a href="/houses" class="btn btn-ghost btn-sm">View all</a>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Rank</th><th>House</th><th>Points</th></tr></thead>
+                <tbody>
+                {% for h in houses %}
+                <tr>
+                    <td>
+                        {% if loop.index == 1 %}<span class="rank gold">#1</span>
+                        {% elif loop.index == 2 %}<span class="rank silver">#2</span>
+                        {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
+                        {% else %}<span class="rank">#{{ loop.index }}</span>{% endif %}
+                    </td>
+                    <td><strong>{{ h.name|capitalize }}</strong></td>
+                    <td><span class="badge badge-gold">{{ h.points|int }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="color:var(--muted);text-align:center;padding:24px">No houses yet</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div><h3>⭐ Top Members</h3><p>Highest scorers</p></div>
+            <a href="/members" class="btn btn-ghost btn-sm">View all</a>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Rank</th><th>User ID</th><th>House</th><th>Pts</th></tr></thead>
+                <tbody>
+                {% for u in users[:8] %}
+                <tr>
+                    <td>
+                        {% if loop.index == 1 %}<span class="rank gold">#1</span>
+                        {% elif loop.index == 2 %}<span class="rank silver">#2</span>
+                        {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
+                        {% else %}<span class="rank">#{{ loop.index }}</span>{% endif %}
+                    </td>
+                    <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ u.user_id }}</td>
+                    <td><span class="badge badge-purple">{{ u.house|capitalize }}</span></td>
+                    <td><strong>{{ u.points|int }}</strong></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:24px">No members yet</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="resetModal" class="modal-overlay">
+    <div class="modal">
+        <h3>🚨 Reset Season</h3>
+        <p>This will wipe ALL points for every house and member. This cannot be undone.</p>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('resetModal')">Cancel</button>
+            <button class="btn btn-danger" onclick="resetSeason()">Reset Everything</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function resetSeason() {
+    const r = await fetch('/api/season/reset', { method: 'POST' });
+    if (r.ok) { toast('Season reset!'); closeModal('resetModal'); setTimeout(() => location.reload(), 1000); }
+    else toast('Something went wrong.', 'error');
+}
+</script>
+{% endblock %}

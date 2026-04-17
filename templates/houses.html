@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %} — Houses{% endblock %}
+{% block page_title %}Houses{% endblock %}
+{% block page_sub %}Manage house points and standings{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div><h3>All Houses</h3><p>Click adjust to add or remove points</p></div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>House</th>
+                    <th>Role ID</th>
+                    <th>Points</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="housesTable">
+            {% for h in houses %}
+            <tr id="row-{{ h.name }}">
+                <td>
+                    {% if loop.index == 1 %}<span class="rank gold">#1</span>
+                    {% elif loop.index == 2 %}<span class="rank silver">#2</span>
+                    {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
+                    {% else %}<span class="rank">#{{ loop.index }}</span>{% endif %}
+                </td>
+                <td><strong>{{ h.name|capitalize }}</strong></td>
+                <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ h.role_id or '—' }}</td>
+                <td><span class="badge badge-gold" id="pts-{{ h.name }}">{{ h.points|int }}</span></td>
+                <td>
+                    <div class="flex gap-10">
+                        <button class="btn btn-success btn-sm" onclick="openAdjust('{{ h.name }}', 'add')">+ Add</button>
+                        <button class="btn btn-danger btn-sm" onclick="openAdjust('{{ h.name }}', 'remove')">− Remove</button>
+                        <button class="btn btn-ghost btn-sm" onclick="openReset('{{ h.name }}')">Reset</button>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:32px">
+                No houses yet. Use <code>!sethouse</code> in Discord to create one.
+            </td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="adjustModal" class="modal-overlay">
+    <div class="modal">
+        <h3 id="adjustTitle">Adjust Points</h3>
+        <p id="adjustDesc">Enter the amount of points to adjust.</p>
+        <div class="form-group">
+            <label>Amount</label>
+            <input type="number" id="adjustAmount" min="1" placeholder="e.g. 50">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('adjustModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitAdjust()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<div id="resetModal" class="modal-overlay">
+    <div class="modal">
+        <h3>Reset House Points</h3>
+        <p id="resetDesc">This will set all points to 0 for this house and its members.</p>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('resetModal')">Cancel</button>
+            <button class="btn btn-danger" onclick="submitReset()">Reset</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentHouse = null;
+let currentAction = null;
+
+function openAdjust(house, action) {
+    currentHouse = house;
+    currentAction = action;
+    document.getElementById('adjustTitle').textContent = (action === 'add' ? '📈 Add Points to ' : '📉 Remove Points from ') + house.charAt(0).toUpperCase() + house.slice(1);
+    document.getElementById('adjustDesc').textContent = action === 'add' ? 'Points will be added to the house and all its members.' : 'Points will be removed from the house and all its members.';
+    document.getElementById('adjustAmount').value = '';
+    openModal('adjustModal');
+}
+
+async function submitAdjust() {
+    const amount = parseInt(document.getElementById('adjustAmount').value);
+    if (!amount || amount < 1) return toast('Enter a valid amount.', 'error');
+    const r = await fetch(`/api/houses/${currentHouse}/points`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: currentAction, amount })
+    });
+    const data = await r.json();
+    if (r.ok) {
+        document.getElementById(`pts-${currentHouse}`).textContent = data.points;
+        toast(`Points updated for ${currentHouse}!`);
+        closeModal('adjustModal');
+    } else {
+        toast('Something went wrong.', 'error');
+    }
+}
+
+function openReset(house) {
+    currentHouse = house;
+    document.getElementById('resetDesc').textContent = `Reset all points for ${house.charAt(0).toUpperCase() + house.slice(1)} to 0?`;
+    openModal('resetModal');
+}
+
+async function submitReset() {
+    const r = await fetch(`/api/houses/${currentHouse}/reset`, { method: 'POST' });
+    if (r.ok) {
+        document.getElementById(`pts-${currentHouse}`).textContent = '0';
+        toast(`${currentHouse} points reset!`);
+        closeModal('resetModal');
+    } else {
+        toast('Something went wrong.', 'error');
+    }
+}
+</script>
+{% endblock %}

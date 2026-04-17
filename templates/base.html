@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ice Dodo Dashboard{% block title %}{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0d0f13;
+            --surface: #161920;
+            --surface2: #1e2229;
+            --border: #2a2e38;
+            --accent: #5865f2;
+            --accent-hover: #4752c4;
+            --green: #57f287;
+            --red: #ed4245;
+            --yellow: #fee75c;
+            --text: #e3e5e8;
+            --muted: #72767d;
+            --radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            min-height: 100vh;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            left: 0; top: 0; bottom: 0;
+            z-index: 10;
+        }
+        .sidebar-logo {
+            padding: 24px 20px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .sidebar-logo h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.3px;
+        }
+        .sidebar-logo span {
+            font-size: 12px;
+            color: var(--muted);
+            display: block;
+            margin-top: 2px;
+        }
+        .sidebar-nav {
+            flex: 1;
+            padding: 16px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .nav-section {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--muted);
+            padding: 12px 8px 6px;
+        }
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+        .nav-link:hover { background: var(--surface2); color: var(--text); }
+        .nav-link.active { background: var(--accent); color: #fff; }
+        .nav-link svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .sidebar-bottom {
+            padding: 16px 12px;
+            border-top: 1px solid var(--border);
+        }
+        .logout-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.15s;
+            width: 100%;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        .logout-btn:hover { background: var(--surface2); color: var(--red); }
+
+        /* Main */
+        .main {
+            margin-left: 240px;
+            flex: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .topbar {
+            padding: 20px 32px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .topbar h2 { font-size: 20px; font-weight: 600; }
+        .topbar p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+        .content { padding: 32px; flex: 1; }
+
+        /* Cards */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .card-header h3 { font-size: 15px; font-weight: 600; }
+        .card-header p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+        .stat-card .label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+        .stat-card .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+        /* Tables */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); padding: 0 16px 12px; }
+        td { padding: 12px 16px; font-size: 14px; border-top: 1px solid var(--border); }
+        tr:hover td { background: var(--surface2); }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-success { background: rgba(87,242,135,0.15); color: var(--green); border: 1px solid rgba(87,242,135,0.3); }
+        .btn-success:hover { background: rgba(87,242,135,0.25); }
+        .btn-danger { background: rgba(237,66,69,0.15); color: var(--red); border: 1px solid rgba(237,66,69,0.3); }
+        .btn-danger:hover { background: rgba(237,66,69,0.25); }
+        .btn-sm { padding: 5px 12px; font-size: 12px; }
+        .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+        .btn-ghost:hover { background: var(--border); }
+
+        /* Badge */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-purple { background: rgba(88,101,242,0.2); color: var(--accent); }
+        .badge-green { background: rgba(87,242,135,0.15); color: var(--green); }
+        .badge-gold { background: rgba(254,231,92,0.15); color: var(--yellow); }
+
+        /* Podium */
+        .podium { display: flex; align-items: flex-end; gap: 12px; justify-content: center; padding: 24px 0 8px; }
+        .podium-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .podium-bar {
+            width: 80px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        .podium-bar.first { height: 100px; background: linear-gradient(180deg, #fee75c33, #fee75c22); border: 1px solid #fee75c44; }
+        .podium-bar.second { height: 70px; background: linear-gradient(180deg, #c0c0c033, #c0c0c022); border: 1px solid #c0c0c044; }
+        .podium-bar.third { height: 50px; background: linear-gradient(180deg, #cd7f3233, #cd7f3222); border: 1px solid #cd7f3244; }
+        .podium-name { font-size: 13px; font-weight: 600; text-align: center; }
+        .podium-pts { font-size: 12px; color: var(--muted); }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            width: 100%;
+            max-width: 440px;
+            animation: pop 0.15s ease;
+        }
+        @keyframes pop { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+        .modal p { font-size: 14px; color: var(--muted); margin-bottom: 20px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+        /* Form */
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+        input, select {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input:focus, select:focus { border-color: var(--accent); }
+        input[type="color"] { padding: 6px; height: 40px; cursor: pointer; }
+
+        /* Toast */
+        .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+        .toast {
+            padding: 12px 18px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            animation: slideIn 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toast-success { background: rgba(87,242,135,0.15); border: 1px solid rgba(87,242,135,0.3); color: var(--green); }
+        .toast-error { background: rgba(237,66,69,0.15); border: 1px solid rgba(237,66,69,0.3); color: var(--red); }
+        @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .mt-24 { margin-top: 24px; }
+        .flex { display: flex; }
+        .gap-10 { gap: 10px; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+
+        .rank { font-size: 12px; color: var(--muted); font-weight: 600; }
+        .rank.gold { color: var(--yellow); }
+        .rank.silver { color: #c0c0c0; }
+        .rank.bronze { color: #cd7f32; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <h1>🧊 Ice Dodo</h1>
+            <span>Dashboard</span>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section">Overview</div>
+            <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                Overview
+            </a>
+            <div class="nav-section">Management</div>
+            <a href="/houses" class="nav-link {% if request.path == '/houses' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+                Houses
+            </a>
+            <a href="/members" class="nav-link {% if request.path == '/members' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                Members
+            </a>
+            <div class="nav-section">Config</div>
+            <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                Settings
+            </a>
+        </nav>
+        <div class="sidebar-bottom">
+            <a href="/logout" class="logout-btn">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                Logout
+            </a>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="topbar">
+            <div>
+                <h2>{% block page_title %}Dashboard{% endblock %}</h2>
+                <p>{% block page_sub %}{% endblock %}</p>
+            </div>
+            <div>{% block topbar_actions %}{% endblock %}</div>
+        </div>
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        function toast(msg, type='success') {
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = `toast toast-${type}`;
+            t.textContent = (type === 'success' ? '✓ ' : '✕ ') + msg;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 3500);
+        }
+        function openModal(id) { document.getElementById(id).classList.add('open'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
