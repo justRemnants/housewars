@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import sqlite3
+import os
 
 # setup the bot because we are sigmas
 intents = discord.Intents.default()
@@ -120,4 +121,4 @@ async def resetseason(ctx):
     await ctx.send("🚨 **SEASON RESET!** 🚨 All points are back to 0. Have fun grinding again you degens.")
     await log_action(ctx, "☢️ SEASON NUKED", f"{ctx.author.mention} just reset all the points.")
 
-bot.run('MTQ5NDQ5ODM3OTc4NTQzNzIxNQ.G5Munc.CRXGJivHhO5hPaa2_Lds7lqzQsLR1hsrX26cNM')
+bot.run(os.environ['DISCORD_TOKEN'])
