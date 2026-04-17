@@ -126,6 +126,14 @@ async def process_pending():
         # Send pending messages
         for msg in db.execute("SELECT * FROM pending_messages WHERE status='pending' LIMIT 3").fetchall():
             channel = bot.get_channel(msg['channel_id'])
+            if not channel:
+                try:
+                    cfg_row = db.execute("SELECT value FROM server_config WHERE key='guild_id'").fetchone()
+                    guild = bot.get_guild(int(cfg_row['value'])) if cfg_row else None
+                    if guild:
+                        channel = guild.get_channel(msg['channel_id']) or await bot.fetch_channel(msg['channel_id'])
+                except Exception:
+                    channel = None
             if channel:
                 try:
                     ed = json.loads(msg['embed_json'])
@@ -238,6 +246,12 @@ async def on_message(message):
             if sticky[8] and sticky[9]:
                 view = discord.ui.View(timeout=None)
                 view.add_item(discord.ui.Button(label=sticky[8], url=sticky[9], style=discord.ButtonStyle.link))
+            if sticky[10]:
+                try:
+                    old = await message.channel.fetch_message(sticky[10])
+                    await old.delete()
+                except Exception:
+                    pass
             sent = await message.channel.send(embed=se, view=view)
             c.execute('UPDATE sticky_messages SET last_message_id=? WHERE id=?', (sent.id, sticky[0]))
             conn.commit()
