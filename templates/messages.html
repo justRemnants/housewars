@@ -12,7 +12,7 @@
 .msg-preview-wrap { background: #313338; border-radius: 8px; padding: 16px; }
 .dc-embed { border-left: 4px solid #5865f2; background: #2b2d31; border-radius: 4px; padding: 12px 14px; position: relative; }
 .dc-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 5px; }
-.dc-desc { font-size: 14px; color: #dbdee1; line-height: 1.5; }
+.dc-desc { font-size: 14px; color: #dbdee1; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .dc-image { max-width: 100%; border-radius: 4px; margin-top: 10px; display: none; }
 .dc-thumb { position: absolute; top: 12px; right: 12px; width: 60px; height: 60px; border-radius: 4px; object-fit: cover; display: none; }
 .dc-footer { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #3f4248; }
@@ -88,7 +88,7 @@
                 </div>
             </div>
             <div class="form-group"><label>Title</label><input type="text" id="b_title" placeholder="Embed title" oninput="updateBuilderPreview()"></div>
-            <div class="form-group"><label>Description</label><textarea id="b_desc" rows="3" placeholder="Embed body text..." oninput="updateBuilderPreview()"></textarea></div>
+            <div class="form-group"><label>Description</label><textarea id="b_desc" rows="6" placeholder="Embed body text..." oninput="updateBuilderPreview()"></textarea><p class="input-hint">Use Discord formatting like &gt; quote, # header, *italic*, **bold**, __underline__, ~~strike~~, `code`, and ```blocks```.</p></div>
             <div class="form-group"><label>Image URL (large image in embed)</label><input type="text" id="b_image" placeholder="https://..." oninput="updateBuilderPreview()"></div>
 
             <div class="section-divider"></div>
@@ -152,7 +152,7 @@
             <div class="form-group"><label>Thumbnail URL</label><input type="text" id="s_thumb" placeholder="https://..."></div>
         </div>
         <div class="form-group"><label>Title</label><input type="text" id="s_title" placeholder="Sticky title"></div>
-        <div class="form-group"><label>Description</label><textarea id="s_desc" rows="3" placeholder="Sticky body..."></textarea></div>
+        <div class="form-group"><label>Description</label><textarea id="s_desc" rows="6" placeholder="Sticky body..."></textarea><p class="input-hint">Multiline and Discord markdown supported.</p></div>
         <div class="form-group"><label>Image URL</label><input type="text" id="s_image" placeholder="https://..."></div>
         <div class="form-row">
             <div class="form-group"><label>Footer Text</label><input type="text" id="s_footer_text" placeholder="Footer..."></div>
