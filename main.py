@@ -18,6 +18,9 @@ intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 
+# Deduplication guard — prevents two lingering processes from both handling the same message
+_handled_messages: set = set()
+
 conn = sqlite3.connect('ice_dodo_sweats.db', check_same_thread=False)
 conn.execute('PRAGMA journal_mode=WAL')
 c = conn.cursor()
@@ -204,6 +207,13 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:
         return
+
+    # Drop duplicate — happens when old + new process briefly overlap on restart
+    if message.id in _handled_messages:
+        return
+    _handled_messages.add(message.id)
+    if len(_handled_messages) > 1000:
+        _handled_messages.clear()
 
     if not message.author.bot:
         # XP per messages
@@ -437,4 +447,4 @@ def run_dashboard():
 if __name__ == '__main__':
     threading.Thread(target=run_dashboard, daemon=True).start()
     print("Dashboard running on port 5000")
-    bot.run(os.environ['DISCORD_TOKEN'])
+    bot.run(os.environ['DISCORD_TOKEN'], reconnect=False)
