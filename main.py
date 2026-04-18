@@ -256,7 +256,8 @@ async def on_message(message):
             c.execute('UPDATE sticky_messages SET last_message_id=? WHERE id=?', (sent.id, sticky[0]))
             conn.commit()
 
-    await bot.process_commands(message)
+    if message.content:
+        await bot.process_commands(message)
 
 
 # --- Commands ---
@@ -424,7 +425,14 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(embed=embed("❌ Missing Argument", f"Missing: `{error.param.name}`", color=0xED4245))
     elif isinstance(error, commands.CommandNotFound):
-        pass
+        return
+    else:
+        raise error
+
+
+@bot.event
+async def on_interaction(interaction):
+    await bot.tree.process_interaction(interaction)
 
 
 def run_dashboard():
