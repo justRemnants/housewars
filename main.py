@@ -230,28 +230,27 @@ async def on_message(message):
         c.execute('SELECT id,title,description,color,image_url,thumbnail_url,footer_text,footer_icon,button_label,button_url,last_message_id FROM sticky_messages WHERE channel_id=? AND active=1', (message.channel.id,))
         sticky = c.fetchone()
         if sticky:
-            if sticky[10]:
-                try:
-                    old = await message.channel.fetch_message(sticky[10])
-                    await old.delete()
-                except Exception: pass
-            try: color_int = int(sticky[3].lstrip('#'), 16)
-            except Exception: color_int = 0x5865F2
-            se = discord.Embed(title=sticky[1] or '', description=sticky[2] or '', color=color_int)
-            if sticky[4]: se.set_image(url=sticky[4])
-            if sticky[5]: se.set_thumbnail(url=sticky[5])
-            ft, fi = sticky[6], sticky[7]
-            if ft: se.set_footer(text=ft, icon_url=fi) if fi else se.set_footer(text=ft)
-            view = None
-            if sticky[8] and sticky[9]:
-                view = discord.ui.View(timeout=None)
-                view.add_item(discord.ui.Button(label=sticky[8], url=sticky[9], style=discord.ButtonStyle.link))
+            # Delete previous sticky post (only once)
             if sticky[10]:
                 try:
                     old = await message.channel.fetch_message(sticky[10])
                     await old.delete()
                 except Exception:
                     pass
+            try:
+                color_int = int(sticky[3].lstrip('#'), 16)
+            except Exception:
+                color_int = 0x5865F2
+            se = discord.Embed(title=sticky[1] or '', description=sticky[2] or '', color=color_int)
+            if sticky[4]: se.set_image(url=sticky[4])
+            if sticky[5]: se.set_thumbnail(url=sticky[5])
+            ft, fi = sticky[6], sticky[7]
+            if ft:
+                se.set_footer(text=ft, icon_url=fi) if fi else se.set_footer(text=ft)
+            view = None
+            if sticky[8] and sticky[9]:
+                view = discord.ui.View(timeout=None)
+                view.add_item(discord.ui.Button(label=sticky[8], url=sticky[9], style=discord.ButtonStyle.link))
             sent = await message.channel.send(embed=se, view=view)
             c.execute('UPDATE sticky_messages SET last_message_id=? WHERE id=?', (sent.id, sticky[0]))
             conn.commit()
@@ -428,11 +427,6 @@ async def on_command_error(ctx, error):
         return
     else:
         raise error
-
-
-@bot.event
-async def on_interaction(interaction):
-    await bot.tree.process_interaction(interaction)
 
 
 def run_dashboard():
