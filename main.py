@@ -9,6 +9,13 @@ import atexit
 import threading
 import json
 from typing import Union, Optional, Literal
+# Supabase connection
+import os
+from supabase import create_client, Client
+
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
 
 # --- Single-instance lock (kills any stale process before connecting) ---
 _PID_FILE = '/tmp/ice_dodo_bot.pid'
