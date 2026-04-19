@@ -154,12 +154,13 @@ async def process_pending():
             channel = bot.get_channel(msg['channel_id'])
             if not channel:
                 try:
-                    cfg_row = db.execute("SELECT value FROM server_config WHERE key='guild_id'").fetchone()
-                    guild = bot.get_guild(int(cfg_row['value'])) if cfg_row else None
-                    if guild:
-                        channel = guild.get_channel(msg['channel_id']) or await bot.fetch_channel(msg['channel_id'])
-                except Exception:
+                    channel = await bot.fetch_channel(msg['channel_id'])
+                except Exception as fetch_err:
+                    print(f'Cannot find channel {msg["channel_id"]}: {fetch_err}')
                     channel = None
+            if not channel:
+                db.execute("UPDATE pending_messages SET status='error' WHERE id=?", (msg['id'],))
+                print(f'Pending message {msg["id"]} dropped — channel {msg["channel_id"]} not accessible')
             if channel:
                 try:
                     ed = json.loads(msg['embed_json'])
@@ -284,9 +285,12 @@ async def on_message(message):
             if sticky[8] and sticky[9]:
                 view = discord.ui.View(timeout=None)
                 view.add_item(discord.ui.Button(label=sticky[8], url=sticky[9], style=discord.ButtonStyle.link))
-            sent = await message.channel.send(embed=se, view=view)
-            c.execute('UPDATE sticky_messages SET last_message_id=? WHERE id=?', (sent.id, sticky[0]))
-            conn.commit()
+            try:
+                sent = await message.channel.send(embed=se, view=view)
+                c.execute('UPDATE sticky_messages SET last_message_id=? WHERE id=?', (sent.id, sticky[0]))
+                conn.commit()
+            except Exception as sticky_err:
+                print(f'Sticky send error in channel {message.channel.id}: {sticky_err}')
 
     if message.content:
         await bot.process_commands(message)
