@@ -3,9 +3,32 @@ from discord.ext import commands, tasks
 from discord import app_commands
 import sqlite3
 import os
+import signal
+import time
+import atexit
 import threading
 import json
 from typing import Union, Optional, Literal
+
+# --- Single-instance lock (kills any stale process before connecting) ---
+_PID_FILE = '/tmp/ice_dodo_bot.pid'
+
+def _acquire_instance_lock():
+    if os.path.exists(_PID_FILE):
+        try:
+            with open(_PID_FILE) as _f:
+                _old_pid = int(_f.read().strip())
+            os.kill(_old_pid, 0)          # Check it's alive
+            print(f"Stopping old bot process {_old_pid}...")
+            os.kill(_old_pid, signal.SIGTERM)
+            time.sleep(3)                 # Give it time to shut down
+        except (ProcessLookupError, ValueError, OSError):
+            pass                          # Already dead or bad PID — fine
+    with open(_PID_FILE, 'w') as _f:
+        _f.write(str(os.getpid()))
+    atexit.register(lambda: os.path.exists(_PID_FILE) and os.unlink(_PID_FILE))
+
+_acquire_instance_lock()
 
 # --- Dynamic prefix ---
 async def get_prefix(bot, message):
