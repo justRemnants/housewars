@@ -390,5 +390,52 @@ def api_send_message():
     conn.close()
     return jsonify({'success': True})
 
+# ---------------------------------------------------------------------------
+# Message Templates API
+# ---------------------------------------------------------------------------
+@app.route('/api/templates', methods=['GET'])
+@login_required
+def api_get_templates():
+    conn = db()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM message_templates ORDER BY created_at DESC')
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/templates', methods=['POST'])
+@login_required
+def api_save_template():
+    data = request.json
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'Template name required'}), 400
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        '''INSERT INTO message_templates
+           (name, title, description, color, image_url, thumbnail_url,
+            footer_text, footer_icon, button_label, button_url)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+        (name, data.get('title', ''), data.get('description', ''),
+         data.get('color', '5865F2').lstrip('#'),
+         data.get('image_url', ''), data.get('thumbnail_url', ''),
+         data.get('footer_text', ''), data.get('footer_icon', ''),
+         data.get('button_label', ''), data.get('button_url', ''))
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/templates/<int:template_id>', methods=['DELETE'])
+@login_required
+def api_delete_template(template_id):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute('DELETE FROM message_templates WHERE id=%s', (template_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
