@@ -1,14 +1,14 @@
-# Use Node.js
-FROM node:18
+FROM node:20
 
-# Create app directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Copy everything from your repo into the container
+# Copy the entire repo
 COPY . .
 
-# Install dependencies (This goes into your bot folder to find the package.json)
+# Move into the bot folder and install dependencies
+# CHANGE 'bot' if your folder has a different name!
 RUN cd bot && npm install
 
 # Start the bot
+# CHANGE 'bot/index.js' if your path is different!
 CMD ["node", "bot/index.js"]
