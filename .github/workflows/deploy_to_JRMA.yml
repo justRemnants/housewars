@@ -1,20 +1,21 @@
-name: Deploy to JRMA
+name: Auto Deploy to JRMA
 
 on:
   push:
     branches:
-      - main  # or 'master' if that's what your main branch is called
+      - main  # This makes it AUTO-RUN every time you push code
+  workflow_dispatch: # This adds a "Run Workflow" button for manual runs
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Push to JustRunMy.app
+      - name: Force Push to JRMA
         run: |
           git remote add jrma ${{ secrets.JRMA_REMOTE_URL }}
           git push -f jrma HEAD:deploy
