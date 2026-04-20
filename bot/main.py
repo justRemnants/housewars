@@ -424,6 +424,50 @@ async def houseboard(ctx):
     lines = [f"{medals[i] if i < 3 else f'**{i+1}.**'} **{r['name'].capitalize()}** — {r['house_points']:,} pts" for i, r in enumerate(res)]
     await ctx.send(embed=embed("🏆 House Leaderboard", "\n".join(lines), color=0xFEE75C))
 
+@bot.hybrid_command(name="leaderboard", description="Show member leaderboard (all or by house)")
+@app_commands.describe(house_name="Optional: filter by house name")
+async def leaderboard(ctx, house_name: Optional[str] = None):
+    conn = get_db()
+    cur = conn.cursor()
+    
+    if house_name:
+        # Leaderboard for specific house
+        house_name = house_name.lower()
+        cur.execute('SELECT user_id, contributions_points, house_id FROM users WHERE house_id=%s ORDER BY contributions_points DESC LIMIT 10', (house_name,))
+        res = cur.fetchall()
+        conn.close()
+        if not res:
+            return await ctx.send(embed=embed("❌ No Members", f"**{house_name.capitalize()}** has no members yet.", color=0xED4245))
+        
+        medals = ["🥇", "🥈", "🥉"]
+        lines = []
+        for i, r in enumerate(res):
+            member = ctx.guild.get_member(int(r['user_id']))
+            name = member.display_name if member else f"User {r['user_id']}"
+            rank = medals[i] if i < 3 else f"**{i+1}.**"
+            lines.append(f"{rank} {name} — **{r['contributions_points']:,}** pts")
+        
+        e = build_embed(f"🏆 {house_name.capitalize()} Leaderboard", "\n".join(lines), house=house_name, color=0xFEE75C)
+        await ctx.send(embed=e)
+    else:
+        # Overall leaderboard (all members)
+        cur.execute('SELECT user_id, contributions_points, house_id FROM users ORDER BY contributions_points DESC LIMIT 15')
+        res = cur.fetchall()
+        conn.close()
+        if not res:
+            return await ctx.send(embed=embed("🏆 Member Leaderboard", "No members yet.", color=0xFEE75C))
+        
+        medals = ["🥇", "🥈", "🥉"]
+        lines = []
+        for i, r in enumerate(res):
+            member = ctx.guild.get_member(int(r['user_id']))
+            name = member.display_name if member else f"User {r['user_id']}"
+            rank = medals[i] if i < 3 else f"**{i+1}.**"
+            house_tag = f"({r['house_id'].capitalize()})" if r['house_id'] else ""
+            lines.append(f"{rank} {name} {house_tag} — **{r['contributions_points']:,}** pts")
+        
+        await ctx.send(embed=embed("🏆 Member Leaderboard", "\n".join(lines), color=0xFEE75C))
+
 @bot.hybrid_command(name="mvp", description="Find the top scorer in a house")
 @app_commands.describe(house_name="The house to check")
 async def mvp(ctx, house_name: str):
