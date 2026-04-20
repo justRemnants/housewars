@@ -1,0 +1,20 @@
+name: Deploy to JRMA
+
+on:
+  push:
+    branches:
+      - main  # or 'master' if that's what your main branch is called
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to JustRunMy.app
+        run: |
+          git remote add jrma ${{ secrets.JRMA_REMOTE_URL }}
+          git push -f jrma HEAD:deploy
