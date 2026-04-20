@@ -18,4 +18,4 @@ jobs:
       - name: Force Push to JRMA
         run: |
           git remote add jrma ${{ secrets.JRMA_REMOTE_URL }}
-          git push -f jrma HEAD:deploy
+          git push -u jrma HEAD:deploy
