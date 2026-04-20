@@ -1,13 +1,13 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy everything
+# Copy everything (including bot/ and dashboard/ folders)
 COPY . .
 
-# Install your dependencies
-# This assumes you have a requirements.txt inside your bot folder
-RUN cd bot && pip install --no-cache-dir -r requirements.txt
+# Install dependencies from your requirements.txt
+# This assumes it's inside the 'bot' folder!
+RUN pip install --no-cache-dir -r bot/requirements.txt
 
-# Run the python file
+# Run the bot using the correct path
 CMD ["python", "bot/index.py"]
