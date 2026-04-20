@@ -9,10 +9,27 @@ import json
 from typing import Optional, Literal
 import psycopg2
 import psycopg2.extras
+from psycopg2 import pool
 
-# --- Supabase / PostgreSQL ---
+# --- Supabase / PostgreSQL with connection pooling ---
+# Connection pool keeps connections alive instead of opening/closing constantly
+connection_pool = None
+
+def init_pool():
+    global connection_pool
+    connection_pool = psycopg2.pool.SimpleConnectionPool(
+        1,  # Min connections
+        10,  # Max connections
+        os.environ['SUPABASE_URL'],
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
+    print("✅ Database connection pool initialized")
+
 def get_db():
-    return psycopg2.connect(os.environ['SUPABASE_URL'], cursor_factory=psycopg2.extras.RealDictCursor)
+    return connection_pool.getconn()
+
+def return_db(conn):
+    connection_pool.putconn(conn)
 
 # --- Single-instance lock (kills any stale process before connecting) ---
 _PID_FILE = '/tmp/ice_dodo_bot.pid'
@@ -40,7 +57,7 @@ async def get_prefix(bot, message):
     cur = conn.cursor()
     cur.execute('SELECT value FROM server_config WHERE key = %s', ('prefix',))
     res = cur.fetchone()
-    conn.close()
+    return_db(conn)
     return res['value'] if res else '!'
 
 intents = discord.Intents.default()
@@ -57,7 +74,7 @@ def get_cfg():
     cur = conn.cursor()
     cur.execute('SELECT key, value FROM server_config')
     rows = cur.fetchall()
-    conn.close()
+    return_db(conn)
     return {r['key']: r['value'] for r in rows}
 
 def build_embed(title, desc, color=None, house=None):
@@ -69,7 +86,7 @@ def build_embed(title, desc, color=None, house=None):
         cur = conn.cursor()
         cur.execute('SELECT color, thumbnail_url FROM houses WHERE name = %s', (house.lower(),))
         h = cur.fetchone()
-        conn.close()
+        return_db(conn)
         if h:
             if h['color'] and color is None:
                 try:
@@ -109,7 +126,7 @@ async def log_action(ctx_or_guild, title, desc, guild=None):
     cur = conn.cursor()
     cur.execute('SELECT value FROM server_config WHERE key = %s', ('log_channel',))
     res = cur.fetchone()
-    conn.close()
+    return_db(conn)
     if res:
         g = guild or (ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else None)
         channel = bot.get_channel(int(res['value']))
@@ -196,7 +213,7 @@ async def process_pending():
                     cur.execute("UPDATE pending_actions SET done = TRUE WHERE id=%s", (action['id'],))
 
         conn.commit()
-        conn.close()
+        return_db(conn)
     except Exception as ex:
         print(f'process_pending error: {ex}')
 
@@ -209,7 +226,7 @@ async def on_ready():
     for guild in bot.guilds:
         cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s', ('guild_id', str(guild.id), str(guild.id)))
     conn.commit()
-    conn.close()
+    return_db(conn)
     process_pending.start()
     try:
         synced = await bot.tree.sync()
@@ -252,7 +269,7 @@ async def on_message(message):
         # Sticky messages
         cur.execute('SELECT id, title, description, color, image_url, thumbnail_url, footer_text, footer_icon, button_label, button_url FROM sticky_messages WHERE channel_id=%s AND active=TRUE', (message.channel.id,))
         sticky = cur.fetchone()
-        conn.close()
+        return_db(conn)
         if sticky:
             try:
                 color_int = int(sticky['color'].lstrip('#'), 16)
@@ -287,7 +304,7 @@ async def setprefix(ctx, new_prefix: str):
     cur = conn.cursor()
     cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s', ('prefix', new_prefix, new_prefix))
     conn.commit()
-    conn.close()
+    return_db(conn)
     await ctx.send(embed=embed("✅ Prefix Updated", f"New prefix is `{new_prefix}`. Use `{new_prefix}help` for commands.", color=0x57F287))
 
 @bot.hybrid_command(name="setlog", description="Set the log channel")
@@ -298,7 +315,7 @@ async def setlog(ctx, channel: discord.TextChannel):
     cur = conn.cursor()
     cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s', ('log_channel', str(channel.id), str(channel.id)))
     conn.commit()
-    conn.close()
+    return_db(conn)
     await ctx.send(embed=embed("📋 Log Channel Set", f"Logs will go to {channel.mention}.", color=0x57F287))
 
 @bot.hybrid_command(name="sethouse", description="Link a house to a Discord role")
@@ -308,9 +325,14 @@ async def sethouse(ctx, house_name: str, role: discord.Role):
     house_name = house_name.lower()
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('INSERT INTO houses (name, house_points, role_id) VALUES (%s, 0, %s) ON CONFLICT (name) DO UPDATE SET role_id=%s', (house_name, role.id, role.id))
+    cur.execute(
+        '''INSERT INTO houses (name, house_points, role_id, color, thumbnail_url)
+           VALUES (%s, 0, %s, %s, %s)
+           ON CONFLICT (name) DO UPDATE SET role_id=%s, color=%s, thumbnail_url=%s''',
+        (house_name, role.id, '5865F2', '', role.id, '5865F2', '')
+    )
     conn.commit()
-    conn.close()
+    return_db(conn)
     await ctx.send(embed=build_embed("🏠 House Linked", f"**{house_name.capitalize()}** linked to {role.mention}.", house=house_name, color=0x57F287))
     await log_action(ctx, "🏠 House Created", f"{ctx.author.mention} linked **{house_name.capitalize()}** to {role.mention}.")
 
@@ -330,7 +352,7 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
         cur.execute('SELECT name FROM houses WHERE role_id=%s', (role.id,))
         res = cur.fetchone()
         if not res:
-            conn.close()
+            return_db(conn)
             return await ctx.send(embed=embed("❌ No House Found", f"{role.mention} isn't linked to any house. Use `sethouse` first.", color=0xED4245))
         resolved_house = res['name']
         resolved_role = role
@@ -339,7 +361,7 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
         cur.execute('SELECT role_id FROM houses WHERE name=%s', (resolved_house,))
         res = cur.fetchone()
         if not res:
-            conn.close()
+            return_db(conn)
             return await ctx.send(embed=embed("❌ House Not Found", f"**{house_name}** doesn't exist. Use `sethouse` first.", color=0xED4245))
         resolved_role = ctx.guild.get_role(int(res['role_id'])) if res['role_id'] else None
 
@@ -347,7 +369,7 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
     old = cur.fetchone()
 
     if old and old['house_id'] == resolved_house:
-        conn.close()
+        return_db(conn)
         return await ctx.send(embed=embed("⚠️ Already in House", f"{member.mention} is already in **{resolved_house.capitalize()}**.", color=0xFEE75C))
 
     if old and old['role_id']:
@@ -361,7 +383,7 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
     cur.execute('INSERT INTO users (user_id, house_id, contributions_points, role_id) VALUES (%s, %s, %s, %s) ON CONFLICT (user_id) DO UPDATE SET house_id=%s, role_id=%s',
                 (str(member.id), resolved_house, old['contributions_points'] if old else 0, resolved_role.id if resolved_role else None, resolved_house, resolved_role.id if resolved_role else None))
     conn.commit()
-    conn.close()
+    return_db(conn)
 
     if resolved_role:
         try:
@@ -382,14 +404,14 @@ async def housepoints(ctx, action: Literal['add', 'remove'], member: discord.Mem
     cur.execute('SELECT house_id FROM users WHERE user_id=%s', (str(member.id),))
     result = cur.fetchone()
     if not result:
-        conn.close()
+        return_db(conn)
         return await ctx.send(embed=embed("❌ No House", f"{member.mention} isn't in a house yet.", color=0xED4245))
     house_name = result['house_id']
     modifier = amount if action == 'add' else -amount
     cur.execute('UPDATE users SET contributions_points = contributions_points + %s WHERE user_id=%s', (modifier, str(member.id)))
     cur.execute('UPDATE houses SET house_points = house_points + %s WHERE name=%s', (modifier, house_name))
     conn.commit()
-    conn.close()
+    return_db(conn)
     if action == 'add':
         await ctx.send(embed=build_embed("📈 Points Added", f"{member.mention} earned **+{amount}** points for **{house_name.capitalize()}**.", house=house_name, color=0x57F287))
     else:
@@ -404,7 +426,7 @@ async def stats(ctx, member: Optional[discord.Member] = None):
     cur = conn.cursor()
     cur.execute('SELECT house_id, contributions_points FROM users WHERE user_id=%s', (str(member.id),))
     res = cur.fetchone()
-    conn.close()
+    return_db(conn)
     if not res:
         return await ctx.send(embed=embed("❌ No Stats", f"{member.mention} isn't in any house yet.", color=0xED4245))
     e = build_embed(f"📊 {member.display_name}'s Stats", f"**House:** {res['house_id'].capitalize()}\n**Points:** {res['contributions_points']:,}", house=res['house_id'])
@@ -417,7 +439,7 @@ async def houseboard(ctx):
     cur = conn.cursor()
     cur.execute('SELECT name, house_points FROM houses ORDER BY house_points DESC')
     res = cur.fetchall()
-    conn.close()
+    return_db(conn)
     if not res:
         return await ctx.send(embed=embed("🏆 House Leaderboard", "No houses yet.", color=0xFEE75C))
     medals = ["🥇", "🥈", "🥉"]
@@ -435,7 +457,7 @@ async def leaderboard(ctx, house_name: Optional[str] = None):
         house_name = house_name.lower()
         cur.execute('SELECT user_id, contributions_points, house_id FROM users WHERE house_id=%s ORDER BY contributions_points DESC LIMIT 10', (house_name,))
         res = cur.fetchall()
-        conn.close()
+        return_db(conn)
         if not res:
             return await ctx.send(embed=embed("❌ No Members", f"**{house_name.capitalize()}** has no members yet.", color=0xED4245))
         
@@ -453,7 +475,7 @@ async def leaderboard(ctx, house_name: Optional[str] = None):
         # Overall leaderboard (all members)
         cur.execute('SELECT user_id, contributions_points, house_id FROM users ORDER BY contributions_points DESC LIMIT 15')
         res = cur.fetchall()
-        conn.close()
+        return_db(conn)
         if not res:
             return await ctx.send(embed=embed("🏆 Member Leaderboard", "No members yet.", color=0xFEE75C))
         
@@ -476,7 +498,7 @@ async def mvp(ctx, house_name: str):
     cur = conn.cursor()
     cur.execute('SELECT user_id, contributions_points FROM users WHERE house_id=%s ORDER BY contributions_points DESC LIMIT 1', (house_name,))
     res = cur.fetchone()
-    conn.close()
+    return_db(conn)
     if not res:
         return await ctx.send(embed=embed("❌ No Results", f"**{house_name.capitalize()}** doesn't exist or has no members.", color=0xED4245))
     member = ctx.guild.get_member(int(res['user_id']))
@@ -494,7 +516,7 @@ async def resetseason(ctx):
     cur.execute('UPDATE users SET contributions_points = 0')
     cur.execute('UPDATE houses SET house_points = 0')
     conn.commit()
-    conn.close()
+    return_db(conn)
     await ctx.send(embed=embed("🚨 Season Reset", "All points wiped. The grind starts fresh.", color=0xED4245))
     await log_action(ctx, "☢️ Season Reset", f"{ctx.author.mention} reset all points.")
 
@@ -516,4 +538,5 @@ async def on_command_error(ctx, error):
         raise error
 
 if __name__ == '__main__':
+    init_pool()
     bot.run(os.environ['DISCORD_TOKEN'], reconnect=False)
