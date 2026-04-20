@@ -329,7 +329,7 @@ async def sethouse(ctx, house_name: str, role: discord.Role):
         '''INSERT INTO houses (name, house_points, role_id, color, thumbnail_url)
            VALUES (%s, 0, %s, %s, %s)
            ON CONFLICT (name) DO UPDATE SET role_id=%s, color=%s, thumbnail_url=%s''',
-        (house_name, role.id, '5865F2', '', role.id, '5865F2', '')
+        (house_name, str(role.id), '5865F2', '', str(role.id), '5865F2', '')
     )
     conn.commit()
     return_db(conn)
@@ -349,7 +349,7 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
     cur = conn.cursor()
 
     if role:
-        cur.execute('SELECT name FROM houses WHERE role_id=%s', (role.id,))
+        cur.execute('SELECT name FROM houses WHERE role_id=%s', (str(role.id),))
         res = cur.fetchone()
         if not res:
             return_db(conn)
@@ -381,7 +381,7 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
                 pass
 
     cur.execute('INSERT INTO users (user_id, house_id, contributions_points, role_id) VALUES (%s, %s, %s, %s) ON CONFLICT (user_id) DO UPDATE SET house_id=%s, role_id=%s',
-                (str(member.id), resolved_house, old['contributions_points'] if old else 0, resolved_role.id if resolved_role else None, resolved_house, resolved_role.id if resolved_role else None))
+                (str(member.id), resolved_house, old['contributions_points'] if old else 0, str(resolved_role.id) if resolved_role else None, resolved_house, str(resolved_role.id) if resolved_role else None))
     conn.commit()
     return_db(conn)
 
