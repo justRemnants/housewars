@@ -23,11 +23,41 @@
 .sticky-info h4 { font-size: 14px; font-weight: 600; }
 .sticky-info p { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: monospace; }
 
-/* FIXED: Make modals scrollable */
-.modal-overlay.open { overflow-y: auto; }
-.modal { margin: 40px auto; max-height: calc(100vh - 80px); overflow-y: auto; }
-</style>
-{% endblock %}
+/* FIXED: Make modals scrollable and keep them rounded */
+.modal-overlay.open { 
+    overflow-y: auto; 
+    display: flex; /* Helps centering */
+    align-items: flex-start;
+    padding: 40px 0;
+}
+
+.modal { 
+    margin: 0 auto; 
+    max-height: calc(100vh - 80px); 
+    overflow-y: auto;
+    border-radius: 12px; /* Ensure this is set */
+    position: relative;
+    
+    /* This is the secret sauce: */
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted) transparent;
+}
+
+/* Chrome, Edge, and Safari scrollbar styling */
+.modal::-webkit-scrollbar {
+    width: 8px;
+}
+
+.modal::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 10px; /* This keeps the scrollbar from hitting the rounded corners */
+}
+
+.modal::-webkit-scrollbar-thumb {
+    background-color: var(--muted);
+    border-radius: 20px;
+    border: 2px solid var(--surface2); /* Matches modal bg to create 'floating' effect */
+}
 
 {% block content %}
 <div class="tabs">
