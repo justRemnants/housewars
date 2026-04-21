@@ -7,74 +7,57 @@
 {% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header">
-        <div><h3>All Houses</h3><p>Click a house to edit its colour and thumbnail</p></div>
+<div class="card" style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;">
+    <div style="padding: 20px; border-bottom: 1px solid var(--border);">
+        <h3 style="font-size: 18px;">All Houses</h3>
     </div>
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Rank</th><th>House</th><th>Colour</th><th>Role ID</th><th>Points</th><th>Actions</th></tr></thead>
-            <tbody id="housesBody">
-            {% for h in houses %}
-            <tr id="hrow-{{ h.name }}">
-                <td>
-                    {% if loop.index == 1 %}<span class="rank gold">#1</span>
-                    {% elif loop.index == 2 %}<span class="rank silver">#2</span>
-                    {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
-                    {% else %}<span class="rank default">#{{ loop.index }}</span>{% endif %}
-                </td>
-                <td>
-                    <div class="flex items-center gap-8">
-                        <span class="color-dot" id="cdot-{{ h.name }}" style="background:#{{ h.color or '5865f2' }}"></span>
-                        <strong>{{ h.name|capitalize }}</strong>
-                    </div>
-                </td>
-                <td><input type="color" value="#{{ h.color or '5865f2' }}" onchange="updateColor('{{ h.name }}', this.value)"></td>
-                <td><code style="font-size:12px; color:var(--muted)">{{ h.role_id }}</code></td>
-                <td><strong id="hpts-{{ h.name }}">{{ h.house_points|int }}</strong></td>
-                <td>
-                    <div class="flex gap-8">
-                        <button class="btn btn-success btn-icon" onclick="openPts('{{ h.name }}', 'add')">↑</button>
-                        <button class="btn btn-danger btn-icon" onclick="openPts('{{ h.name }}', 'remove')">↓</button>
-                        <button class="btn btn-ghost btn-icon" onclick="openResetHouse('{{ h.name }}')">🔄</button>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+                <tr style="background: var(--surface2); color: var(--muted); font-size: 12px; text-transform: uppercase;">
+                    <th style="padding: 12px 20px;">Rank</th>
+                    <th style="padding: 12px 20px;">House</th>
+                    <th style="padding: 12px 20px;">Colour</th>
+                    <th style="padding: 12px 20px;">Points</th>
+                    <th style="padding: 12px 20px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for h in houses %}
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding: 16px 20px;">#{{ loop.index }}</td>
+                    <td style="padding: 16px 20px;">
+                        <div class="flex items-center gap-8">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; background: #{{ h.color }}"></span>
+                            <strong>{{ h.name|capitalize }}</strong>
+                        </div>
+                    </td>
+                    <td style="padding: 16px 20px;">
+                        <div class="color-input-wrapper">
+                            <input type="color" value="#{{ h.color }}" onchange="updateColor('{{ h.name }}', this.value)">
+                            <span style="font-family: monospace; font-size: 12px; color: var(--muted)">#{{ h.color }}</span>
+                        </div>
+                    </td>
+                    <td style="padding: 16px 20px;"><strong>{{ h.house_points|int }}</strong></td>
+                    <td style="padding: 16px 20px;">
+                        <button class="btn btn-sm" style="background: var(--surface3)" onclick="openPts('{{ h.name }}', 'add')">Update</button>
+                    </td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
-    </div>
-</div>
-
-<div id="createModal" class="modal-overlay">
-    <div class="modal">
-        <div class="modal-content">
-            <h3>Create New House</h3>
-            <div style="margin-top:16px">
-                <label>House Name</label>
-                <input type="text" id="new_hname" placeholder="e.g. Gryffindor">
-            </div>
-            <div class="modal-actions" style="margin-top:24px">
-                <button class="btn btn-ghost" onclick="closeModal('createModal')">Cancel</button>
-                <button class="btn btn-primary" onclick="doCreateHouse()">Create</button>
-            </div>
-        </div>
     </div>
 </div>
 
 <script>
 async function updateColor(name, val) {
     const hex = val.replace('#', '');
-    const r = await fetch(`/api/houses/${name}/color`, {
+    await fetch(`/api/houses/${name}/color`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({color: hex})
     });
-    if(r.ok) {
-        document.getElementById('cdot-'+name).style.background = val;
-        toast('Color updated!');
-    }
+    toast('Color updated!');
 }
-// ... rest of your JS logic ...
 </script>
 {% endblock %}
