@@ -7,7 +7,6 @@
     <link rel="icon" type="image/png" href="/static/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --bg: #0d0f13; --surface: #161920; --surface2: #1e2229; --surface3: #252931;
@@ -15,129 +14,101 @@
             --green: #57f287; --red: #ed4245; --yellow: #fee75c; --orange: #ff8c00;
             --text: #e3e5e8; --muted: #72767d; --radius: 12px;
         }
-
-        /* 1. Sleek Scrollbar (Grey, no track, fits inside modal) */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #3f444e;
-            border-radius: 20px;
-            border: 2px solid var(--surface); /* This creates the 'gap' to look like it's inside */
-            background-clip: content-box;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #4f545c;
-        }
-
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; overflow-x: hidden; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
 
+        /* SCROLLBAR RIZZ */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; margin: 6px; /* fits inside modal close to edge */ }
+        ::-webkit-scrollbar-thumb { background: #555; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #777; }
+        
+        /* Make sure modals scroll internally to keep corners */
+        .modal { max-height: 85vh; overflow-y: auto; overflow-x: hidden; } 
+
+        /* COLOUR PICKER DRIP */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: 2px solid var(--border);
+            width: 36px; height: 36px;
+            border-radius: 8px;
+            cursor: pointer; padding: 0; background: var(--bg);
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+        /* LAYOUT CSS */
         .sidebar {
             width: 260px; background: var(--surface); border-right: 1px solid var(--border);
-            display: flex; flex-direction: column; position: fixed; height: 100vh;
+            display: flex; flex-direction: column;
         }
-
-        .sidebar-header {
-            padding: 24px; display: flex; align-items: center; gap: 12px;
+        /* Aligned to 80px topbar */
+        .sidebar-logo-container {
+            height: 80px; display: flex; align-items: center; justify-content: center;
         }
-        
-        /* 3. Sleek Logo Divider (doesn't span whole bar) */
+        .sidebar-logo { font-size: 20px; font-weight: 700; color: #fff; }
+        /* Sleek divider */
         .sidebar-divider {
-            height: 1px;
-            background: var(--border);
-            margin: 0 24px 16px 24px;
+            width: 50%; height: 1px; background: var(--border); margin: 0 auto 24px auto;
         }
 
-        .nav { flex: 1; padding: 0 12px; }
+        .nav-menu { flex: 1; padding: 0 16px; display: flex; flex-direction: column; gap: 4px; }
         .nav-item {
             display: flex; align-items: center; gap: 12px; padding: 12px 16px;
             color: var(--muted); text-decoration: none; border-radius: 8px;
-            font-size: 14px; font-weight: 500; transition: all 0.2s; margin-bottom: 4px;
+            font-weight: 500; transition: all 0.2s;
         }
-        .nav-item:hover, .nav-item.active { background: var(--surface2); color: var(--text); }
-        .nav-item i { width: 20px; text-align: center; }
+        .nav-item:hover, .nav-item.active { background: var(--surface2); color: #fff; }
 
-        .main { margin-left: 260px; flex: 1; display: flex; flex-direction: column; min-width: 0; }
-        
-        /* 5. Aligned Topbar Divider */
+        .main { flex: 1; display: flex; flex-direction: column; height: 100vh; }
         .topbar {
-            padding: 24px 32px; border-bottom: 1px solid var(--border);
-            display: flex; justify-content: space-between; align-items: center;
-            background: var(--bg); position: sticky; top: 0; z-index: 10;
+            height: 80px; min-height: 80px; padding: 0 40px; display: flex; justify-content: space-between;
+            align-items: center; border-bottom: 1px solid var(--border);
         }
+        .content { padding: 40px; flex: 1; overflow-y: auto; }
 
-        .content { padding: 32px; max-width: 1200px; }
+        /* OTHER RANDOM SHIT FROM YOUR FILE */
+        .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+        .toast { padding: 12px 16px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .toast-success { border-color: var(--green); }
+        .toast-error { border-color: var(--red); }
 
-        /* 6. Sleek Color Picker Wrapper */
-        .color-picker-container {
-            display: flex; align-items: center; gap: 10px; background: var(--surface2);
-            padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
-            width: fit-content;
-        }
-        input[type="color"] {
-            -webkit-appearance: none; border: none; width: 24px; height: 24px;
-            border-radius: 4px; cursor: pointer; background: none; padding: 0;
-        }
-        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
-
-        /* Modals */
-        .modal-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-            display: flex; align-items: center; justify-content: center;
-            opacity: 0; pointer-events: none; transition: 0.2s; z-index: 100;
-        }
-        .modal-overlay.open { opacity: 1; pointer-events: all; }
-        .modal {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 16px; width: 100%; max-width: 500px;
-            max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
-        }
-        .modal-content { padding: 24px; overflow-y: auto; padding-right: 8px; }
-
-        /* Original Utility Classes */
-        .flex { display: flex; }
-        .items-center { align-items: center; }
-        .gap-8 { gap: 8px; }
-        .btn { padding: 10px 18px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 14px; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 999; backdrop-filter: blur(2px); }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 100%; max-width: 400px; position: relative; }
+        
+        .btn { cursor: pointer; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; transition: 0.2s; }
         .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); }
         .btn-danger { background: var(--red); color: white; }
         .btn-sm { padding: 6px 12px; font-size: 13px; }
-        .badge { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-        .badge-purple { background: rgba(88,101,242,0.15); color: #5865f2; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .card-header { padding: 20px; border-bottom: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th, td { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+        .flex { display: flex; } .gap-8 { gap: 8px; } .items-center { align-items: center; }
     </style>
+    {% block head %}{% endblock %}
 </head>
 <body>
     <aside class="sidebar">
-        <div class="sidebar-header">
-            <img src="/static/favicon.png" style="width:32px; border-radius:8px">
-            <h2 style="font-size:18px">Ice Dodo</h2>
+        <div class="sidebar-logo-container">
+            <div class="sidebar-logo">Ice Dodo</div>
         </div>
+        
         <div class="sidebar-divider"></div>
-        <nav class="nav">
-            <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
-                <i class="fa-solid fa-house"></i> Overview
-            </a>
-            <a href="/houses" class="nav-item {% if request.path == '/houses' %}active{% endif %}">
-                <i class="fa-solid fa-shield-halved"></i> Houses
-            </a>
-            <a href="/members" class="nav-item {% if request.path == '/members' %}active{% endif %}">
-                <i class="fa-solid fa-users"></i> Members
-            </a>
-            <a href="/messages" class="nav-item {% if request.path == '/messages' %}active{% endif %}">
-                <i class="fa-solid fa-message"></i> Messages
-            </a>
-            <a href="/settings" class="nav-item {% if request.path == '/settings' %}active{% endif %}">
-                <i class="fa-solid fa-gear"></i> Settings
-            </a>
+
+        <nav class="nav-menu">
+            <a href="/" class="nav-item">Overview</a>
+            <a href="/houses" class="nav-item">Houses</a>
+            <a href="/members" class="nav-item">Members</a>
+            <a href="/messages" class="nav-item">Messages</a>
+            <a href="/settings" class="nav-item">Settings</a>
         </nav>
-        <div class="sidebar-footer" style="padding: 16px; border-top: 1px solid var(--border)">
-            <a href="/logout" class="nav-item" style="color: var(--red)">
-                <i class="fa-solid fa-right-from-bracket"></i> Logout
+
+        <div style="padding: 16px;">
+            <a href="/logout" class="nav-item" style="color: var(--red);">
+                Logout
             </a>
         </div>
     </aside>
@@ -145,7 +116,7 @@
     <main class="main">
         <div class="topbar">
             <div>
-                <h2 style="font-weight: 700; font-size: 22px;">{% block page_title %}Dashboard{% endblock %}</h2>
+                <h2 style="margin-bottom: 4px;">{% block page_title %}Dashboard{% endblock %}</h2>
                 <p style="color: var(--muted); font-size: 14px;">{% block page_sub %}{% endblock %}</p>
             </div>
             <div class="flex gap-8 items-center">{% block topbar_actions %}{% endblock %}</div>
@@ -153,18 +124,27 @@
         <div class="content">{% block content %}{% endblock %}</div>
     </main>
 
-    <div id="toastContainer" style="position: fixed; bottom: 24px; right: 24px; z-index: 1000;"></div>
+    <div class="toast-container" id="toastContainer"></div>
     <script>
     function toast(msg, type='success') {
         const c = document.getElementById('toastContainer');
         const t = document.createElement('div');
-        t.style = "background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 12px 20px; border-radius: 8px; margin-top: 10px; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);";
-        t.innerHTML = msg;
+        t.className = `toast toast-${type}`;
+        t.innerHTML = `<span>${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span> ${msg}`;
         c.appendChild(t);
-        setTimeout(() => t.remove(), 3000);
+        setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(16px)'; t.style.transition='all 0.2s'; setTimeout(()=>t.remove(),200); }, 3200);
     }
     function openModal(id) { document.getElementById(id).classList.add('open'); }
     function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
+        });
+    });
     </script>
+    
+    <script src="//instant.page/5.2.0" type="module" integrity="sha384-jnZcg01v1l1yB1uB5rZ/J52wRz2c7SthL7G0E9T4Qv/JvB+Bmfz5r3X7x0Z8c0="></script>
+    
+    {% block scripts %}{% endblock %}
 </body>
 </html>
