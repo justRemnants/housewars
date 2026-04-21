@@ -1,609 +1,235 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ice Dodo{% block title %}{% endblock %}</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0d0f13; --surface: #161920; --surface2: #1e2229; --surface3: #252931;
+            --border: #2a2e38; --accent: #5865f2; --accent-hover: #4752c4;
+            --green: #57f287; --red: #ed4245; --yellow: #fee75c; --orange: #ff8c00;
+            --text: #e3e5e8; --muted: #72767d; --radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; }
 
-{% block title %} — Messages{% endblock %}
+        .sidebar {
+            width: 240px; min-height: 100vh; background: var(--surface);
+            border-right: 1px solid var(--border); display: flex; flex-direction: column;
+            position: fixed; left: 0; top: 0; bottom: 0; z-index: 10;
+        }
+        .sidebar-logo { padding: 22px 20px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+        .sidebar-logo img { width: 32px; height: 32px; border-radius: 8px; }
+        .sidebar-logo h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+        .sidebar-logo span { font-size: 11px; color: var(--muted); display: block; margin-top: 1px; }
+        .sidebar-nav { flex: 1; padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; }
+        .nav-section { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 10px 10px 5px; }
+        .nav-link {
+            display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+            border-radius: 8px; color: var(--muted); text-decoration: none;
+            font-size: 14px; font-weight: 500; transition: all 0.15s; position: relative;
+        }
+        .nav-link:hover { background: var(--surface2); color: var(--text); }
+        .nav-link.active { background: var(--accent); color: #fff; }
+        .nav-link svg { width: 17px; height: 17px; flex-shrink: 0; }
+        .sidebar-bottom { padding: 14px 10px; border-top: 1px solid var(--border); }
+        .logout-btn {
+            display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+            border-radius: 8px; color: var(--muted); text-decoration: none;
+            font-size: 14px; font-weight: 500; transition: all 0.15s; width: 100%;
+            background: none; border: none; cursor: pointer; font-family: inherit;
+        }
+        .logout-btn:hover { background: var(--surface2); color: var(--red); }
 
-{% block page_title %}Messages{% endblock %}
+        .main { margin-left: 240px; flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+        .topbar {
+            padding: 18px 32px; border-bottom: 1px solid var(--border);
+            background: var(--surface); display: flex; align-items: center; justify-content: space-between;
+            animation: fadeDown 0.3s ease;
+        }
+        .topbar h2 { font-size: 19px; font-weight: 700; }
+        .topbar p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+        .content { padding: 28px 32px; flex: 1; animation: fadeUp 0.35s ease; }
 
-{% block page_sub %}Sticky messages and message builder{% endblock %}
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+        .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+        .card-header h3 { font-size: 15px; font-weight: 600; }
+        .card-header p { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-bottom: 22px; }
+        .stat-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 18px; animation: fadeUp 0.4s ease; transition: border-color 0.2s, transform 0.2s;
+        }
+        .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .stat-card .label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
+        .stat-card .sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
 
+        table { width: 100%; border-collapse: collapse; }
+        .table-wrap { overflow-x: auto; }
+        th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); padding: 0 14px 10px; }
+        td { padding: 11px 14px; font-size: 14px; border-top: 1px solid var(--border); transition: background 0.1s; }
+        tr { animation: fadeIn 0.3s ease; }
+        tr:hover td { background: var(--surface2); }
 
-{% block head %}
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px; padding: 8px 15px;
+            border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+            border: none; transition: all 0.15s; text-decoration: none; font-family: inherit;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn-success { background: rgba(87,242,135,0.12); color: var(--green); border: 1px solid rgba(87,242,135,0.25); }
+        .btn-success:hover { background: rgba(87,242,135,0.2); }
+        .btn-danger { background: rgba(237,66,69,0.12); color: var(--red); border: 1px solid rgba(237,66,69,0.25); }
+        .btn-danger:hover { background: rgba(237,66,69,0.2); }
+        .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+        .btn-ghost:hover { background: var(--surface3); }
+        .btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 6px; }
+        .btn-warning { background: rgba(254,231,92,0.12); color: var(--yellow); border: 1px solid rgba(254,231,92,0.25); }
+        .btn-warning:hover { background: rgba(254,231,92,0.2); }
 
-<style>
+        .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .badge-purple { background: rgba(88,101,242,0.18); color: var(--accent); }
+        .badge-green { background: rgba(87,242,135,0.12); color: var(--green); }
+        .badge-gold { background: rgba(254,231,92,0.12); color: var(--yellow); }
+        .badge-red { background: rgba(237,66,69,0.12); color: var(--red); }
 
-.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; align-items: center; justify-content: center; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 26px; width: 100%; max-width: 480px; animation: modalPop 0.18s ease; }
+        .modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+        .modal > p { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 
-.tab { padding: 10px 20px; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+        .form-group { margin-bottom: 14px; }
+        label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+        input, select, textarea {
+            width: 100%; padding: 9px 13px; background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit;
+            outline: none; transition: border-color 0.15s; resize: vertical;
+        }
+        input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+        input[type="color"] { padding: 5px; height: 38px; cursor: pointer; }
+        .input-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .toggle { display: flex; align-items: center; gap: 10px; }
+        .toggle-switch { width: 40px; height: 22px; background: var(--border); border-radius: 11px; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+        .toggle-switch.on { background: var(--accent); }
+        .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s; }
+        .toggle-switch.on::after { transform: translateX(18px); }
 
-.tab-panel { display: none; } .tab-panel.active { display: block; }
+        .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+        .toast { padding: 11px 16px; border-radius: 10px; font-size: 13px; font-weight: 500; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; }
+        .toast-success { background: rgba(87,242,135,0.12); border: 1px solid rgba(87,242,135,0.25); color: var(--green); }
+        .toast-error { background: rgba(237,66,69,0.12); border: 1px solid rgba(237,66,69,0.25); color: var(--red); }
+        .toast-info { background: rgba(88,101,242,0.12); border: 1px solid rgba(88,101,242,0.25); color: var(--accent); }
 
-.msg-preview-wrap { background: #313338; border-radius: 8px; padding: 16px; }
+        .podium { display: flex; align-items: flex-end; gap: 12px; justify-content: center; padding: 20px 0 8px; }
+        .podium-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .podium-bar { width: 80px; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+        .podium-bar.first { height: 100px; background: linear-gradient(180deg, #fee75c22, #fee75c11); border: 1px solid #fee75c33; }
+        .podium-bar.second { height: 70px; background: linear-gradient(180deg, #c0c0c022, #c0c0c011); border: 1px solid #c0c0c033; }
+        .podium-bar.third { height: 50px; background: linear-gradient(180deg, #cd7f3222, #cd7f3211); border: 1px solid #cd7f3233; }
+        .podium-name { font-size: 13px; font-weight: 600; text-align: center; }
+        .podium-pts { font-size: 12px; color: var(--muted); }
+        .podium-dot { width: 10px; height: 10px; border-radius: 50%; margin: 0 auto; }
 
-.dc-embed { border-left: 4px solid #5865f2; background: #2b2d31; border-radius: 4px; padding: 12px 14px; position: relative; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+        .mt-18 { margin-top: 18px; } .mt-24 { margin-top: 24px; }
+        .flex { display: flex; } .gap-8 { gap: 8px; } .gap-10 { gap: 10px; } .gap-12 { gap: 12px; }
+        .items-center { align-items: center; } .justify-between { justify-content: space-between; }
+        .rank { font-size: 11px; font-weight: 700; }
+        .rank.gold { color: var(--yellow); } .rank.silver { color: #c0c0c0; } .rank.bronze { color: #cd7f32; } .rank.default { color: var(--muted); }
+        .color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+        .section-divider { height: 1px; background: var(--border); margin: 18px 0; }
+        code { background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
 
-.dc-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 5px; }
-
-.dc-desc { font-size: 14px; color: #dbdee1; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-
-.dc-image { max-width: 100%; border-radius: 4px; margin-top: 10px; display: none; }
-
-.dc-thumb { position: absolute; top: 12px; right: 12px; width: 60px; height: 60px; border-radius: 4px; object-fit: cover; display: none; }
-
-.dc-footer { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #3f4248; }
-
-.dc-footer-icon { width: 16px; height: 16px; object-fit: cover; border-radius: 50%; display: none; background: transparent; }
-
-.dc-footer-text { font-size: 12px; color: #949ba4; }
-
-.dc-btn { background: #4e505e; color: #fff; border: none; border-radius: 4px; padding: 8px 16px; font-size: 13px; font-weight: 600; margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; cursor: default; }
-
-.sticky-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; animation: fadeUp 0.3s ease; }
-
-.sticky-info h4 { font-size: 14px; font-weight: 600; }
-
-.sticky-info p { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: monospace; }
-
-
-
-/* FIXED: Make modals scrollable */
-
-.modal-overlay.open { overflow-y: auto; }
-
-.modal { margin: 40px auto; max-height: calc(100vh - 80px); overflow-y: auto; }
-
-</style>
-
-{% endblock %}
-
-
-
-{% block content %}
-
-<div class="tabs">
-
-    <div class="tab active" onclick="switchTab('sticky')">📌 Sticky Messages</div>
-
-    <div class="tab" onclick="switchTab('builder')">🔨 Message Builder</div>
-
-</div>
-
-
-
-<!-- Sticky Tab -->
-
-<div class="tab-panel active" id="tab-sticky">
-
-    <div class="flex justify-between items-center" style="margin-bottom:16px">
-
-        <div>
-
-            <h3 style="font-size:15px;font-weight:600">Sticky Messages</h3>
-
-            <p style="font-size:13px;color:var(--muted)">Messages that re-post themselves whenever someone chats in a channel.</p>
-
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes modalPop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes toastIn { from { transform: translateX(16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .skeleton { background: var(--surface2); border-radius: 6px; animation: pulse 1.5s infinite; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <img src="/static/favicon.png" alt="Icon">
+            <div><h1>Ice Dodo</h1><span>Dashboard</span></div>
         </div>
-
-        <button class="btn btn-primary btn-sm" onclick="openModal('newStickyModal')">+ New Sticky</button>
-
-    </div>
-
-    <div id="stickiesList" style="display:flex;flex-direction:column;gap:10px">
-
-    {% for s in stickies %}
-
-    <div class="sticky-card" id="scard-{{ s.id }}">
-
-        <div class="sticky-info">
-
-            <h4>{{ s.title or '(No title)' }}</h4>
-
-            <p>Channel ID: {{ s.channel_id }}</p>
-
+        <nav class="sidebar-nav">
+            <div class="nav-section">Overview</div>
+            <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                Overview
+            </a>
+            <div class="nav-section">Management</div>
+            <a href="/houses" class="nav-link {% if request.path == '/houses' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+                Houses
+            </a>
+            <a href="/members" class="nav-link {% if request.path == '/members' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                Members
+            </a>
+            <a href="/messages" class="nav-link {% if request.path == '/messages' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                Messages
+            </a>
+            <div class="nav-section">Config</div>
+            <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                Settings
+            </a>
+        </nav>
+        <div class="sidebar-bottom">
+            <a href="/logout" class="logout-btn">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="17" height="17"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                Logout
+            </a>
         </div>
+    </aside>
 
-        <div class="flex items-center gap-8">
-
-            <span class="badge {% if s.active %}badge-green{% else %}badge-red{% endif %}" id="stag-{{ s.id }}">
-
-                {% if s.active %}Active{% else %}Paused{% endif %}
-
-            </span>
-
-            <button class="btn btn-ghost btn-sm" onclick="toggleSticky({{ s.id }})">⏸ Toggle</button>
-
-            <button class="btn btn-danger btn-sm" onclick="deleteSticky({{ s.id }})">🗑</button>
-
-        </div>
-
-    </div>
-
-    {% else %}
-
-    <div id="emptyStickies" style="text-align:center;color:var(--muted);padding:40px;background:var(--surface);border:1px solid var(--border);border-radius:12px">
-
-        No sticky messages yet. Create one with the button above.
-
-    </div>
-
-    {% endfor %}
-
-    </div>
-
-</div>
-
-
-
-<!-- Builder Tab -->
-
-<div class="tab-panel" id="tab-builder">
-
-    <div class="grid-2">
-
-        <div class="card">
-
-            <div class="card-header"><div><h3>🔨 Build a Message</h3><p>Send a custom embed to any channel</p></div></div>
-
-
-
-            <div class="form-group">
-
-                <label>Channel ID</label>
-
-                <input type="text" id="b_channel" placeholder="e.g. 1234567890123456789">
-
-                <p class="input-hint">Right-click the channel in Discord → Copy Channel ID</p>
-
+    <main class="main">
+        <div class="topbar">
+            <div>
+                <h2>{% block page_title %}Dashboard{% endblock %}</h2>
+                <p>{% block page_sub %}{% endblock %}</p>
             </div>
-
-            <div class="form-row">
-
-                <div class="form-group">
-
-                    <label>Accent Colour</label>
-
-                    <div class="flex gap-8 items-center">
-
-                        <input type="color" id="b_color_picker" value="#5865f2" style="width:48px;flex-shrink:0">
-
-                        <input type="text" id="b_color" value="#5865f2">
-
-                    </div>
-
-                </div>
-
-                <div class="form-group">
-
-                    <label>Thumbnail URL</label>
-
-                    <input type="text" id="b_thumb" placeholder="https://..." oninput="updateBuilderPreview()">
-
-                </div>
-
-            </div>
-
-            <div class="form-group"><label>Title</label><input type="text" id="b_title" placeholder="Embed title" oninput="updateBuilderPreview()"></div>
-
-            <div class="form-group"><label>Description</label><textarea id="b_desc" rows="6" placeholder="Embed body text..." oninput="updateBuilderPreview()"></textarea><p class="input-hint">Multi-line and Discord markdown supported</p></div>
-
-            <div class="form-group"><label>Main Image URL</label><input type="text" id="b_image" placeholder="https://..." oninput="updateBuilderPreview()"></div>
-
-
-
-            <div class="section-divider"></div>
-
-            <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-bottom:12px">Footer</p>
-
-            <div class="form-row">
-
-                <div class="form-group"><label>Footer Text</label><input type="text" id="b_footer_text" placeholder="Footer text..." oninput="updateBuilderPreview()"></div>
-
-                <div class="form-group"><label>Footer Icon</label><input type="text" id="b_footer_icon" placeholder="https://..." oninput="updateBuilderPreview()"></div>
-
-            </div>
-
-
-
-            <div class="section-divider"></div>
-
-            <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-bottom:12px">Button</p>
-
-            <div class="form-row">
-
-                <div class="form-group"><label>Button Label</label><input type="text" id="b_btn_label" placeholder="e.g. View Channel" oninput="updateBuilderPreview()"></div>
-
-                <div class="form-group">
-
-                    <label>Button URL or Channel ID</label>
-
-                    <input type="text" id="b_btn_url" placeholder="https://... or channel ID" oninput="updateBuilderPreview()">
-
-                    <p class="input-hint">For a channel: paste the channel ID and it auto-formats the link</p>
-
-                </div>
-
-            </div>
-
-
-
-            <button class="btn btn-primary" onclick="sendMessage()" style="width:100%;margin-top:8px">🚀 Send Message</button>
-
+            <div class="flex gap-8 items-center">{% block topbar_actions %}{% endblock %}</div>
         </div>
-
-
-
-        <div>
-
-            <div class="card">
-
-                <div class="card-header"><div><h3>👁 Preview</h3><p>Live Discord preview</p></div></div>
-
-                <div class="msg-preview-wrap">
-
-                    <div class="dc-embed" id="builderEmbed">
-
-                        <div class="dc-title" id="b_prev_title">Embed Title</div>
-
-                        <div class="dc-desc" id="b_prev_desc">Your message will appear here.</div>
-
-                        <img class="dc-image" id="b_prev_image" src="" alt="">
-
-                        <img class="dc-thumb" id="b_prev_thumb" src="" alt="">
-
-                        <div id="b_prev_footer" class="dc-footer" style="display:none">
-
-                            <img class="dc-footer-icon" id="b_prev_footer_icon" src="" alt="">
-
-                            <span class="dc-footer-text" id="b_prev_footer_text"></span>
-
-                        </div>
-
-                        <div id="b_prev_btn" style="display:none">
-
-                            <button class="dc-btn">🔗 <span id="b_prev_btn_label">Button</span></button>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-</div>
-
-
-
-<!-- New Sticky Modal -->
-
-<div id="newStickyModal" class="modal-overlay">
-
-    <div class="modal" style="max-width:600px">
-
-        <h3>📌 New Sticky Message</h3>
-
-        <p>This embed will re-post itself whenever someone sends a message in the chosen channel.</p>
-
-        <div class="form-group"><label>Channel ID</label><input type="text" id="s_channel" placeholder="Discord channel ID"></div>
-
-        <div class="form-row">
-
-            <div class="form-group">
-
-                <label>Colour</label>
-
-                <div class="flex gap-8 items-center">
-
-                    <input type="color" id="s_color_picker" value="#5865f2" style="width:48px;flex-shrink:0">
-
-                    <input type="text" id="s_color" value="#5865f2">
-
-                </div>
-
-            </div>
-
-            <div class="form-group"><label>Thumbnail URL</label><input type="text" id="s_thumb" placeholder="https://..."></div>
-
-        </div>
-
-        <div class="form-group"><label>Title</label><input type="text" id="s_title" placeholder="Sticky title"></div>
-
-        <div class="form-group"><label>Description</label><textarea id="s_desc" rows="6" placeholder="Sticky body..."></textarea><p class="input-hint">Multiline and Discord markdown supported.</p></div>
-
-        <div class="form-group"><label>Image URL</label><input type="text" id="s_image" placeholder="https://..."></div>
-
-        <div class="form-row">
-
-            <div class="form-group"><label>Footer Text</label><input type="text" id="s_footer_text" placeholder="Footer..."></div>
-
-            <div class="form-group"><label>Footer Icon</label><input type="text" id="s_footer_icon" placeholder="https://..."></div>
-
-        </div>
-
-        <div class="form-row">
-
-            <div class="form-group"><label>Button Label</label><input type="text" id="s_btn_label" placeholder="e.g. Go to Rules"></div>
-
-            <div class="form-group"><label>Button URL or Channel ID</label><input type="text" id="s_btn_url" placeholder="https://... or channel ID"></div>
-
-        </div>
-
-        <div class="modal-actions">
-
-            <button class="btn btn-ghost" onclick="closeModal('newStickyModal')">Cancel</button>
-
-            <button class="btn btn-primary" onclick="createSticky()">Create Sticky</button>
-
-        </div>
-
-    </div>
-
-</div>
-
-{% endblock %}
-
-
-
-{% block scripts %}
-
-<script>
-
-function switchTab(tab) {
-
-    document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', ['sticky','builder'][i]===tab));
-
-    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-
-    document.getElementById('tab-'+tab).classList.add('active');
-
-}
-
-
-
-// Color pickers sync
-
-['b_color_picker','s_color_picker'].forEach(id => {
-
-    document.getElementById(id)?.addEventListener('input', e => {
-
-        const target = id === 'b_color_picker' ? 'b_color' : 's_color';
-
-        document.getElementById(target).value = e.target.value;
-
-        if (id === 'b_color_picker') updateBuilderPreview();
-
+        <div class="content">{% block content %}{% endblock %}</div>
+    </main>
+
+    <div class="toast-container" id="toastContainer"></div>
+    <script>
+    function toast(msg, type='success') {
+        const c = document.getElementById('toastContainer');
+        const t = document.createElement('div');
+        t.className = `toast toast-${type}`;
+        t.innerHTML = `<span>${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span> ${msg}`;
+        c.appendChild(t);
+        setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(16px)'; t.style.transition='all 0.2s'; setTimeout(()=>t.remove(),200); }, 3200);
+    }
+    function openModal(id) { document.getElementById(id).classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+            m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
+        });
     });
-
-});
-
-document.getElementById('b_color')?.addEventListener('input', e => {
-
-    if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)) document.getElementById('b_color_picker').value = e.target.value;
-
-    updateBuilderPreview();
-
-});
-
-
-
-function resolveUrl(val) {
-
-    if (!val) return '';
-
-    if (/^\d+$/.test(val.trim())) {
-
-        // It's a channel ID — need guild ID. Use a placeholder that user will see.
-
-        return `https://discord.com/channels/GUILD_ID/${val.trim()}`;
-
-    }
-
-    return val;
-
-}
-
-
-
-function updateBuilderPreview() {
-
-    const color = document.getElementById('b_color').value || '#5865f2';
-
-    document.getElementById('builderEmbed').style.borderLeftColor = color;
-
-
-
-    const title = document.getElementById('b_title').value;
-
-    document.getElementById('b_prev_title').textContent = title || 'Embed Title';
-
-
-
-    const desc = document.getElementById('b_desc').value;
-
-    document.getElementById('b_prev_desc').textContent = desc || 'Your message will appear here.';
-
-
-
-    const image = document.getElementById('b_image').value;
-
-    const imgEl = document.getElementById('b_prev_image');
-
-    if (image) { imgEl.src = image; imgEl.style.display = 'block'; } else imgEl.style.display = 'none';
-
-
-
-    const thumb = document.getElementById('b_thumb').value;
-
-    const thumbEl = document.getElementById('b_prev_thumb');
-
-    if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; } else thumbEl.style.display = 'none';
-
-
-
-    const ft = document.getElementById('b_footer_text').value;
-
-    const fi = document.getElementById('b_footer_icon').value;
-
-    const footerEl = document.getElementById('b_prev_footer');
-
-    if (ft || fi) {
-
-        footerEl.style.display = 'flex';
-
-        document.getElementById('b_prev_footer_text').textContent = ft;
-
-        const fiEl = document.getElementById('b_prev_footer_icon');
-
-        if (fi) { fiEl.src = fi; fiEl.style.display = 'block'; fiEl.style.background = 'transparent'; } else fiEl.style.display = 'none';
-
-    } else footerEl.style.display = 'none';
-
-
-
-    const btnLabel = document.getElementById('b_btn_label').value;
-
-    const btnEl = document.getElementById('b_prev_btn');
-
-    if (btnLabel) { document.getElementById('b_prev_btn_label').textContent = btnLabel; btnEl.style.display = 'block'; }
-
-    else btnEl.style.display = 'none';
-
-}
-
-
-
-async function sendMessage() {
-
-    const channelId = document.getElementById('b_channel').value.trim();
-
-    if (!channelId || !/^\d+$/.test(channelId)) return toast('Enter a valid channel ID.', 'error');
-
-    const btnUrl = document.getElementById('b_btn_url').value.trim();
-
-    const resolvedUrl = resolveUrl(btnUrl);
-
-    const color = document.getElementById('b_color').value.replace('#','');
-
-    const payload = {
-
-        channel_id: parseInt(channelId),
-
-        title: document.getElementById('b_title').value,
-
-        description: document.getElementById('b_desc').value,
-
-        color: color,
-
-        image_url: document.getElementById('b_image').value,
-
-        thumbnail_url: document.getElementById('b_thumb').value,
-
-        footer_text: document.getElementById('b_footer_text').value,
-
-        footer_icon: document.getElementById('b_footer_icon').value,
-
-        button_label: document.getElementById('b_btn_label').value,
-
-        button_url: resolvedUrl
-
-    };
-
-    const r = await fetch('/api/send-message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-
-    if (r.ok) toast('Message queued! Sending within a few seconds.', 'info');
-
-    else toast('Failed to queue message.', 'error');
-
-}
-
-
-
-async function createSticky() {
-
-    const channelId = document.getElementById('s_channel').value.trim();
-
-    if (!channelId || !/^\d+$/.test(channelId)) return toast('Enter a valid channel ID.', 'error');
-
-    const color = document.getElementById('s_color').value.replace('#','');
-
-    const btnUrl = document.getElementById('s_btn_url').value.trim();
-
-    const resolvedUrl = resolveUrl(btnUrl);
-
-    const payload = {
-
-        channel_id: parseInt(channelId),
-
-        title: document.getElementById('s_title').value,
-
-        description: document.getElementById('s_desc').value,
-
-        color: color,
-
-        image_url: document.getElementById('s_image').value,
-
-        thumbnail_url: document.getElementById('s_thumb').value,
-
-        footer_text: document.getElementById('s_footer_text').value,
-
-        footer_icon: document.getElementById('s_footer_icon').value,
-
-        button_label: document.getElementById('s_btn_label').value,
-
-        button_url: resolvedUrl
-
-    };
-
-    const r = await fetch('/api/sticky', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-
-    if (r.ok) { toast('Sticky created!'); closeModal('newStickyModal'); setTimeout(()=>location.reload(),800); }
-
-    else toast('Failed.', 'error');
-
-}
-
-
-
-async function toggleSticky(id) {
-
-    const r = await fetch(`/api/sticky/${id}/toggle`, {method:'POST'});
-
-    const data = await r.json();
-
-    if (r.ok) {
-
-        const tag = document.getElementById('stag-'+id);
-
-        tag.textContent = data.active ? 'Active' : 'Paused';
-
-        tag.className = `badge ${data.active ? 'badge-green' : 'badge-red'}`;
-
-        toast(data.active ? 'Sticky activated.' : 'Sticky paused.');
-
-    }
-
-}
-
-
-
-async function deleteSticky(id) {
-
-    if (!confirm('Delete this sticky message?')) return;
-
-    const r = await fetch(`/api/sticky/${id}`, {method:'DELETE'});
-
-    if (r.ok) { document.getElementById('scard-'+id)?.remove(); toast('Sticky deleted.'); }
-
-    else toast('Failed.', 'error');
-
-}
-
-</script>
-
-{% endblock %}
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
