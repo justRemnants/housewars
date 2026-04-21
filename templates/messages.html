@@ -22,6 +22,10 @@
 .sticky-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; animation: fadeUp 0.3s ease; }
 .sticky-info h4 { font-size: 14px; font-weight: 600; }
 .sticky-info p { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: monospace; }
+
+/* FIXED: Make modals scrollable */
+.modal-overlay.open { overflow-y: auto; }
+.modal { margin: 40px auto; max-height: calc(100vh - 80px); overflow-y: auto; }
 </style>
 {% endblock %}
 
