@@ -60,53 +60,273 @@
 
 {% block content %}
 <div class="tabs">
-    <div class="tab active" onclick="switchTab('sticky')">📌 Sticky Messages</div>
-    <div class="tab" onclick="switchTab('builder')">🔨 Message Builder</div>
+    <div class="tab active" onclick="switchTab('sticky')">📌 Sticky Messages</div>
+    <div class="tab" onclick="switchTab('builder')">🔨 Message Builder</div>
 </div>
 
 <div class="tab-panel active" id="tab-sticky">
-    <div class="flex justify-between items-center" style="margin-bottom:16px">
-        <div>
-            <h3 style="font-size:15px;font-weight:600">Sticky Messages</h3>
-            <p style="font-size:13px;color:var(--muted)">Messages that re-post themselves whenever someone chats in a channel.</p>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="openModal('newStickyModal')">+ New Sticky</button>
-    </div>
-    <div id="stickiesList" style="display:flex;flex-direction:column;gap:10px">
-    {% for s in stickies %}
-    <div class="sticky-card" id="scard-{{ s.id }}">
-        <div class="sticky-info">
-            <h4>{{ s.title or '(No title)' }}</h4>
-            <p>Channel ID: {{ s.channel_id }}</p>
-        </div>
-        <div class="flex items-center gap-8">
-            <span class="badge {% if s.active %}badge-green{% else %}badge-red{% endif %}" id="stag-{{ s.id }}">
-                {% if s.active %}Active{% else %}Paused{% endif %}
-            </span>
-            <button class="btn btn-ghost btn-sm" onclick="toggleSticky({{ s.id }})">⏸ Toggle</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteSticky({{ s.id }})">🗑</button>
-        </div>
-    </div>
-    {% else %}
-    <div id="emptyStickies" style="text-align:center;color:var(--muted);padding:40px;background:var(--surface);border:1px solid var(--border);border-radius:12px">
-        No sticky messages yet. Create one with the button above.
-    </div>
-    {% endfor %}
-    </div>
+    <div class="flex justify-between items-center" style="margin-bottom:16px">
+        <div>
+            <h3 style="font-size:15px;font-weight:600">Sticky Messages</h3>
+            <p style="font-size:13px;color:var(--muted)">Messages that re-post themselves whenever someone chats in a channel.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openModal('newStickyModal')">+ New Sticky</button>
+    </div>
+    <div id="stickiesList" style="display:flex;flex-direction:column;gap:10px">
+    {% for s in stickies %}
+    <div class="sticky-card" id="scard-{{ s.id }}">
+        <div class="sticky-info">
+            <h4>{{ s.title or '(No title)' }}</h4>
+            <p>Channel ID: {{ s.channel_id }}</p>
+        </div>
+        <div class="flex items-center gap-8">
+            <span class="badge {% if s.active %}badge-green{% else %}badge-red{% endif %}" id="stag-{{ s.id }}">
+                {% if s.active %}Active{% else %}Paused{% endif %}
+            </span>
+            <button class="btn btn-ghost btn-sm" onclick="toggleSticky({{ s.id }})">⏸ Toggle</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSticky({{ s.id }})">🗑</button>
+        </div>
+    </div>
+    {% else %}
+    <div id="emptyStickies" style="text-align:center;color:var(--muted);padding:40px;background:var(--surface);border:1px solid var(--border);border-radius:12px">
+        No sticky messages yet. Create one with the button above.
+    </div>
+    {% endfor %}
+    </div>
 </div>
 
 <div class="tab-panel" id="tab-builder">
-    <div class="grid-2">
-        <div class="card">
-            <div class="card-header"><div><h3>🔨 Build a Message</h3><p>Send a custom embed to any channel</p></div></div>
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-header"><div><h3>🔨 Build a Message</h3><p>Send a custom embed to any channel</p></div></div>
 
-            <div class="form-group">
-                <label>Channel ID</label>
-                <input type="text" id="b_channel" placeholder="e.g. 1234567890123456789">
-                <p class="input-hint">Right-click the channel in Discord → Copy Channel ID</p>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Accent Colour</label>
-                    <div class="flex gap-8 items-center">
-                        <input type="color" id="b_color_picker" value="#5865f2" style="width:48px;flex-shrink:0">
+            <div class="form-group">
+                <label>Channel ID</label>
+                <input type="text" id="b_channel" placeholder="e.g. 1234567890123456789">
+                <p class="input-hint">Right-click the channel in Discord → Copy Channel ID</p>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Accent Colour</label>
+                    <div class="flex gap-8 items-center">
+                        <input type="color" id="b_color_picker" value="#5865f2" style="width:48px;flex-shrink:0">
+                        <input type="text" id="b_color" value="#5865f2">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Thumbnail URL</label>
+                    <input type="text" id="b_thumb" placeholder="https://..." oninput="updateBuilderPreview()">
+                </div>
+            </div>
+            <div class="form-group"><label>Title</label><input type="text" id="b_title" placeholder="Embed title" oninput="updateBuilderPreview()"></div>
+            <div class="form-group"><label>Description</label><textarea id="b_desc" rows="6" placeholder="Embed body text..." oninput="updateBuilderPreview()"></textarea><p class="input-hint">Multi-line and Discord markdown supported</p></div>
+            <div class="form-group"><label>Main Image URL</label><input type="text" id="b_image" placeholder="https://..." oninput="updateBuilderPreview()"></div>
+
+            <div class="section-divider"></div>
+            <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-bottom:12px">Footer</p>
+            <div class="form-row">
+                <div class="form-group"><label>Footer Text</label><input type="text" id="b_footer_text" placeholder="Footer text..." oninput="updateBuilderPreview()"></div>
+                <div class="form-group"><label>Footer Icon</label><input type="text" id="b_footer_icon" placeholder="https://..." oninput="updateBuilderPreview()"></div>
+            </div>
+
+            <div class="section-divider"></div>
+            <p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-bottom:12px">Button</p>
+            <div class="form-row">
+                <div class="form-group"><label>Button Label</label><input type="text" id="b_btn_label" placeholder="e.g. View Channel" oninput="updateBuilderPreview()"></div>
+                <div class="form-group">
+                    <label>Button URL or Channel ID</label>
+                    <input type="text" id="b_btn_url" placeholder="https://... or channel ID" oninput="updateBuilderPreview()">
+                    <p class="input-hint">For a channel: paste the channel ID and it auto-formats the link</p>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="sendMessage()" style="width:100%;margin-top:8px">🚀 Send Message</button>
+        </div>
+
+        <div>
+            <div class="card">
+                <div class="card-header"><div><h3>👁 Preview</h3><p>Live Discord preview</p></div></div>
+                <div class="msg-preview-wrap">
+                    <div class="dc-embed" id="builderEmbed">
+                        <div class="dc-title" id="b_prev_title">Embed Title</div>
+                        <div class="dc-desc" id="b_prev_desc">Your message will appear here.</div>
+                        <img class="dc-image" id="b_prev_image" src="" alt="">
+                        <img class="dc-thumb" id="b_prev_thumb" src="" alt="">
+                        <div id="b_prev_footer" class="dc-footer" style="display:none">
+                            <img class="dc-footer-icon" id="b_prev_footer_icon" src="" alt="">
+                            <span class="dc-footer-text" id="b_prev_footer_text"></span>
+                        </div>
+                        <div id="b_prev_btn" style="display:none">
+                            <button class="dc-btn">🔗 <span id="b_prev_btn_label">Button</span></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="newStickyModal" class="modal-overlay">
+    <div class="modal" style="max-width:600px">
+        <div class="modal-scroll-area">
+            <h3>📌 New Sticky Message</h3>
+            <p>This embed will re-post itself whenever someone sends a message in the chosen channel.</p>
+            <div class="form-group"><label>Channel ID</label><input type="text" id="s_channel" placeholder="Discord channel ID"></div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Colour</label>
+                    <div class="flex gap-8 items-center">
+                        <input type="color" id="s_color_picker" value="#5865f2" style="width:48px;flex-shrink:0">
+                        <input type="text" id="s_color" value="#5865f2">
+                    </div>
+                </div>
+                <div class="form-group"><label>Thumbnail URL</label><input type="text" id="s_thumb" placeholder="https://..."></div>
+            </div>
+            <div class="form-group"><label>Title</label><input type="text" id="s_title" placeholder="Sticky title"></div>
+            <div class="form-group"><label>Description</label><textarea id="s_desc" rows="6" placeholder="Sticky body..."></textarea><p class="input-hint">Multiline and Discord markdown supported.</p></div>
+            <div class="form-group"><label>Image URL</label><input type="text" id="s_image" placeholder="https://..."></div>
+            <div class="form-row">
+                <div class="form-group"><label>Footer Text</label><input type="text" id="s_footer_text" placeholder="Footer..."></div>
+                <div class="form-group"><label>Footer Icon</label><input type="text" id="s_footer_icon" placeholder="https://..."></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label>Button Label</label><input type="text" id="s_btn_label" placeholder="e.g. Go to Rules"></div>
+                <div class="form-group"><label>Button URL or Channel ID</label><input type="text" id="s_btn_url" placeholder="https://... or channel ID"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('newStickyModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="createSticky()">Create Sticky</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', ['sticky','builder'][i]===tab));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    document.getElementById('tab-'+tab).classList.add('active');
+}
+
+// Color pickers sync
+['b_color_picker','s_color_picker'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', e => {
+        const target = id === 'b_color_picker' ? 'b_color' : 's_color';
+        document.getElementById(target).value = e.target.value;
+        if (id === 'b_color_picker') updateBuilderPreview();
+    });
+});
+document.getElementById('b_color')?.addEventListener('input', e => {
+    if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)) document.getElementById('b_color_picker').value = e.target.value;
+    updateBuilderPreview();
+});
+
+function resolveUrl(val) {
+    if (!val) return '';
+    if (/^\d+$/.test(val.trim())) {
+        return `https://discord.com/channels/GUILD_ID/${val.trim()}`;
+    }
+    return val;
+}
+
+function updateBuilderPreview() {
+    const color = document.getElementById('b_color').value || '#5865f2';
+    document.getElementById('builderEmbed').style.borderLeftColor = color;
+
+    const title = document.getElementById('b_title').value;
+    document.getElementById('b_prev_title').textContent = title || 'Embed Title';
+
+    const desc = document.getElementById('b_desc').value;
+    document.getElementById('b_prev_desc').textContent = desc || 'Your message will appear here.';
+
+    const image = document.getElementById('b_image').value;
+    const imgEl = document.getElementById('b_prev_image');
+    if (image) { imgEl.src = image; imgEl.style.display = 'block'; } else imgEl.style.display = 'none';
+
+    const thumb = document.getElementById('b_thumb').value;
+    const thumbEl = document.getElementById('b_prev_thumb');
+    if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; } else thumbEl.style.display = 'none';
+
+    const ft = document.getElementById('b_footer_text').value;
+    const fi = document.getElementById('b_footer_icon').value;
+    const footerEl = document.getElementById('b_prev_footer');
+    if (ft || fi) {
+        footerEl.style.display = 'flex';
+        document.getElementById('b_prev_footer_text').textContent = ft;
+        const fiEl = document.getElementById('b_prev_footer_icon');
+        if (fi) { fiEl.src = fi; fiEl.style.display = 'block'; fiEl.style.background = 'transparent'; } else fiEl.style.display = 'none';
+    } else footerEl.style.display = 'none';
+
+    const btnLabel = document.getElementById('b_btn_label').value;
+    const btnEl = document.getElementById('b_prev_btn');
+    if (btnLabel) { document.getElementById('b_prev_btn_label').textContent = btnLabel; btnEl.style.display = 'block'; }
+    else btnEl.style.display = 'none';
+}
+
+async function sendMessage() {
+    const channelId = document.getElementById('b_channel').value.trim();
+    if (!channelId || !/^\d+$/.test(channelId)) return toast('Enter a valid channel ID.', 'error');
+    const btnUrl = document.getElementById('b_btn_url').value.trim();
+    const resolvedUrl = resolveUrl(btnUrl);
+    const color = document.getElementById('b_color').value.replace('#','');
+    const payload = {
+        channel_id: parseInt(channelId),
+        title: document.getElementById('b_title').value,
+        description: document.getElementById('b_desc').value,
+        color: color,
+        image_url: document.getElementById('b_image').value,
+        thumbnail_url: document.getElementById('b_thumb').value,
+        footer_text: document.getElementById('b_footer_text').value,
+        footer_icon: document.getElementById('b_footer_icon').value,
+        button_label: document.getElementById('b_btn_label').value,
+        button_url: resolvedUrl
+    };
+    const r = await fetch('/api/send-message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if (r.ok) toast('Message queued! Sending within a few seconds.', 'info');
+    else toast('Failed to queue message.', 'error');
+}
+
+async function createSticky() {
+    const channelId = document.getElementById('s_channel').value.trim();
+    if (!channelId || !/^\d+$/.test(channelId)) return toast('Enter a valid channel ID.', 'error');
+    const color = document.getElementById('s_color').value.replace('#','');
+    const btnUrl = document.getElementById('s_btn_url').value.trim();
+    const resolvedUrl = resolveUrl(btnUrl);
+    const payload = {
+        channel_id: parseInt(channelId),
+        title: document.getElementById('s_title').value,
+        description: document.getElementById('s_desc').value,
+        color: color,
+        image_url: document.getElementById('s_image').value,
+        thumbnail_url: document.getElementById('s_thumb').value,
+        footer_text: document.getElementById('s_footer_text').value,
+        footer_icon: document.getElementById('s_footer_icon').value,
+        button_label: document.getElementById('s_btn_label').value,
+        button_url: resolvedUrl
+    };
+    const r = await fetch('/api/sticky', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if (r.ok) { toast('Sticky created!'); closeModal('newStickyModal'); setTimeout(()=>location.reload(),800); }
+    else toast('Failed.', 'error');
+}
+
+async function toggleSticky(id) {
+    const r = await fetch(`/api/sticky/${id}/toggle`, {method:'POST'});
+    const data = await r.json();
+    if (r.ok) {
+        const tag = document.getElementById('stag-'+id);
+        tag.textContent = data.active ? 'Active' : 'Paused';
+        tag.className = `badge ${data.active ? 'badge-green' : 'badge-red'}`;
+        toast(data.active ? 'Sticky activated.' : 'Sticky paused.');
+    }
+}
+
+async function deleteSticky(id) {
+    if (!confirm('Delete this sticky message?')) return;
+    const r = await fetch(`/api/sticky/${id}`, {method:'DELETE'});
+    if (r.ok) { document.getElementById('scard-'+id)?.remove(); toast('Sticky deleted.'); }
+    else toast('Failed.', 'error');
+}
+</script>
+{% endblock %}
