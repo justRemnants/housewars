@@ -15,23 +15,21 @@
             --text: #e3e5e8; --muted: #72767d; --radius: 12px;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
         
-        /* Sidebar Refactor for Alignment */
+        /* Sidebar - Fixed Width, No Tweaking */
         .sidebar {
-            width: 260px; background: var(--surface); border-right: 1px solid var(--border);
-            display: flex; flex-direction: column; padding: 24px; flex-shrink: 0;
+            width: 260px; min-width: 260px; background: var(--surface); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; height: 100%;
         }
         .sidebar-header {
-            display: flex; align-items: center; gap: 12px;
-            padding-bottom: 23px; /* Adjusted to align with topbar */
+            height: 80px; padding: 0 24px; display: flex; align-items: center; gap: 12px;
             border-bottom: 1px solid var(--border);
-            margin-bottom: 24px;
         }
         .sidebar-header img { width: 32px; height: 32px; border-radius: 8px; }
-        .sidebar-header h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.5px; }
+        .sidebar-header h1 { font-size: 16px; font-weight: 700; }
 
-        .nav-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+        .nav-container { padding: 24px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
         .nav-item { 
             display: flex; align-items: center; gap: 10px; padding: 10px 12px;
             border-radius: 8px; color: var(--muted); text-decoration: none;
@@ -40,34 +38,40 @@
         .nav-item:hover { background: var(--surface2); color: var(--text); }
         .nav-item.active { background: var(--accent); color: #fff; }
 
-        /* Main Content Alignment */
-        .main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
+        /* Main Area */
+        .main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; height: 100%; }
         .topbar {
-            height: 81px; /* Fixed height for alignment */
-            padding: 0 32px; border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: space-between;
-            background: var(--surface);
+            height: 80px; min-height: 80px; padding: 0 32px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between; background: var(--surface);
         }
         .content { padding: 32px; overflow-y: auto; flex-grow: 1; }
 
-        /* Nicer Color Pickers */
+        /* Sleek Color Pickers */
         input[type="color"] {
-            -webkit-appearance: none; border: none; width: 32px; height: 32px;
-            border-radius: 50%; cursor: pointer; background: none; padding: 0;
+            -webkit-appearance: none; border: none; width: 28px; height: 28px;
+            border-radius: 50%; cursor: pointer; background: transparent; padding: 0;
         }
         input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
         input[type="color"]::-webkit-color-swatch { border: 2px solid var(--border); border-radius: 50%; }
 
-        /* Utility */
+        /* Standard Components */
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
         .flex { display: flex; } .items-center { align-items: center; } .gap-8 { gap: 8px; }
-        .btn { padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: 0.15s; }
+        .btn { padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: 0.15s; font-size: 14px; }
         .btn-primary { background: var(--accent); color: white; }
-        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-danger { background: rgba(237, 66, 69, 0.1); color: var(--red); border-color: rgba(237, 66, 69, 0.2); }
+        .btn-sm { padding: 6px 12px; font-size: 13px; }
 
+        /* Toasts */
         .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
-        .toast { background: var(--surface3); border: 1px solid var(--border); padding: 12px 18px; border-radius: 10px; font-size: 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); animation: slideIn 0.3s ease; }
+        .toast { background: var(--surface3); border: 1px solid var(--border); padding: 12px 18px; border-radius: 10px; font-size: 14px; animation: slideIn 0.3s ease; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         
+        /* Modals */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: var(--surface); padding: 24px; border-radius: 16px; width: 100%; max-width: 480px; border: 1px solid var(--border); }
+
         {% block head %}{% endblock %}
     </style>
 </head>
@@ -77,26 +81,28 @@
             <img src="/static/favicon.png" alt="Logo">
             <h1>Ice Dodo</h1>
         </div>
-        <nav class="nav-list">
-            <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">🏠 Overview</a>
-            <a href="/houses" class="nav-item {% if request.path == '/houses' %}active{% endif %}">🏰 Houses</a>
-            <a href="/members" class="nav-item {% if request.path == '/members' %}active{% endif %}">👥 Members</a>
-            <a href="/messages" class="nav-item {% if request.path == '/messages' %}active{% endif %}">✉️ Messages</a>
-            <a href="/settings" class="nav-item {% if request.path == '/settings' %}active{% endif %}">⚙️ Settings</a>
-        </nav>
-        <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border);">
-            <a href="/logout" class="nav-item" style="color: var(--red);">🚪 Logout</a>
+        <div class="nav-container">
+            <nav class="nav-list">
+                <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">🏠 Overview</a>
+                <a href="/houses" class="nav-item {% if request.path == '/houses' %}active{% endif %}">🏰 Houses</a>
+                <a href="/members" class="nav-item {% if request.path == '/members' %}active{% endif %}">👥 Members</a>
+                <a href="/messages" class="nav-item {% if request.path == '/messages' %}active{% endif %}">✉️ Messages</a>
+                <a href="/settings" class="nav-item {% if request.path == '/settings' %}active{% endif %}">⚙️ Settings</a>
+            </nav>
+            <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border);">
+                <a href="/logout" class="nav-item" style="color: var(--red);">🚪 Logout</a>
+            </div>
         </div>
     </aside>
 
     <main class="main">
-        <div class="topbar">
+        <header class="topbar">
             <div>
                 <h2 style="font-size: 18px; font-weight: 700;">{% block page_title %}Dashboard{% endblock %}</h2>
                 <p style="font-size: 13px; color: var(--muted);">{% block page_sub %}{% endblock %}</p>
             </div>
             <div class="flex gap-8 items-center">{% block topbar_actions %}{% endblock %}</div>
-        </div>
+        </header>
         <div class="content">{% block content %}{% endblock %}</div>
     </main>
 
@@ -107,17 +113,14 @@
         const c = document.getElementById('toastContainer');
         const t = document.createElement('div');
         t.className = `toast toast-${type}`;
-        t.innerHTML = `<span>${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span> ${msg}`;
+        t.innerHTML = msg;
         c.appendChild(t);
-        setTimeout(() => { 
-            t.style.opacity='0'; t.style.transform='translateX(16px)'; t.style.transition='all 0.2s'; 
-            setTimeout(()=>t.remove(), 200); 
-        }, 3200);
+        setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(), 400); }, 3000);
     }
     function openModal(id) { document.getElementById(id).classList.add('open'); }
     function closeModal(id) { document.getElementById(id).classList.remove('open'); }
     </script>
-    <script src="//instant.page/5.2.0" type="module" integrity="sha384-JnE30MB9ZaoUcZ+5vshqXmY0r47UfGuN+5tU0ux31upTzLxrOsh8pA9z3IueqC5V"></script>
+    <script src="//instant.page/5.2.0" type="module"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
