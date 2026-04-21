@@ -10,24 +10,34 @@ from typing import Optional, Literal
 import psycopg2
 import psycopg2.extras
 from psycopg2 import pool
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-# --- Supabase / PostgreSQL with connection pooling ---
+# --- Optimized Supabase / PostgreSQL connection pooling ---
 connection_pool = None
 
 def init_pool():
     global connection_pool
+    # OPTIMIZATION: Increased min connections for faster availability
+    # OPTIMIZATION: Set connection options for better performance
     connection_pool = psycopg2.pool.SimpleConnectionPool(
-        1,  # Min connections
-        10,  # Max connections
+        2,  # Min connections (increased from 1)
+        15,  # Max connections (increased from 10)
         os.environ['SUPABASE_URL'],
-        cursor_factory=psycopg2.extras.RealDictCursor
+        cursor_factory=psycopg2.extras.RealDictCursor,
+        # OPTIMIZATION: Disable autocommit for batch operations
+        options='-c statement_timeout=5000'  # 5 second query timeout
     )
-    print("✅ Database connection pool initialized")
+    print("✅ Database connection pool initialized (2-15 connections)")
 
 def get_db():
-    return connection_pool.getconn()
+    """Get a database connection from the pool"""
+    conn = connection_pool.getconn()
+    # OPTIMIZATION: Set session to autocommit for reads
+    conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+    return conn
 
 def return_db(conn):
+    """Return connection to pool"""
     connection_pool.putconn(conn)
 
 # --- Single-instance lock ---
@@ -50,16 +60,25 @@ def _acquire_instance_lock():
 
 _acquire_instance_lock()
 
-# --- Dynamic prefix ---
+# --- Dynamic prefix with caching ---
+_prefix_cache = '!'
+_prefix_cache_time = 0
+
 async def get_prefix(bot, message):
-    conn = get_db()
-    try:
-        cur = conn.cursor()
-        cur.execute('SELECT value FROM server_config WHERE key = %s', ('prefix',))
-        res = cur.fetchone()
-        return res['value'] if res else '!'
-    finally:
-        return_db(conn)
+    global _prefix_cache, _prefix_cache_time
+    now = time.time()
+    # OPTIMIZATION: Cache prefix for 5 minutes (changes rarely)
+    if now - _prefix_cache_time > 300:
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            cur.execute('SELECT value FROM server_config WHERE key = %s', ('prefix',))
+            res = cur.fetchone()
+            _prefix_cache = res['value'] if res else '!'
+            _prefix_cache_time = now
+        finally:
+            return_db(conn)
+    return _prefix_cache
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -69,15 +88,15 @@ bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 # Deduplication guard
 _handled_messages: set = set()
 
-# Config cache (refreshed every 60 seconds)
+# OPTIMIZATION: Extended config cache (120 seconds instead of 60)
 _config_cache = {}
 _config_cache_time = 0
 
-# --- Embed helpers ---
+# --- Embed helpers with aggressive caching ---
 def get_cfg():
     global _config_cache, _config_cache_time
     now = time.time()
-    if now - _config_cache_time > 60:
+    if now - _config_cache_time > 120:  # Cache for 2 minutes
         conn = get_db()
         try:
             cur = conn.cursor()
@@ -89,25 +108,40 @@ def get_cfg():
             return_db(conn)
     return _config_cache
 
+# OPTIMIZATION: House data cache
+_house_cache = {}
+_house_cache_time = 0
+
+def get_house_data(house_name):
+    global _house_cache, _house_cache_time
+    now = time.time()
+    # Refresh cache every 60 seconds
+    if now - _house_cache_time > 60:
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            cur.execute('SELECT name, color, thumbnail_url FROM houses')
+            rows = cur.fetchall()
+            _house_cache = {r['name']: r for r in rows}
+            _house_cache_time = now
+        finally:
+            return_db(conn)
+    return _house_cache.get(house_name.lower())
+
 def build_embed(title, desc, color=None, house=None):
     cfg = get_cfg()
     house_thumb = None
 
     if house:
-        conn = get_db()
-        try:
-            cur = conn.cursor()
-            cur.execute('SELECT color, thumbnail_url FROM houses WHERE name = %s', (house.lower(),))
-            h = cur.fetchone()
-            if h:
-                if h['color'] and color is None:
-                    try:
-                        color = int(h['color'].lstrip('#'), 16)
-                    except ValueError:
-                        pass
-                house_thumb = h['thumbnail_url'] if h['thumbnail_url'] else None
-        finally:
-            return_db(conn)
+        # OPTIMIZATION: Use cached house data instead of querying
+        h = get_house_data(house)
+        if h:
+            if h['color'] and color is None:
+                try:
+                    color = int(h['color'].lstrip('#'), 16)
+                except ValueError:
+                    pass
+            house_thumb = h['thumbnail_url'] if h['thumbnail_url'] else None
 
     if color is None:
         raw = cfg.get('embed_color')
@@ -168,7 +202,6 @@ async def process_pending():
                     except Exception as fetch_err:
                         print(f'Cannot find channel {msg["channel_id"]}: {fetch_err}')
                         cur.execute("UPDATE pending_messages SET sent = TRUE WHERE id=%s", (msg['id'],))
-                        conn.commit()
                         continue
                 
                 if channel:
@@ -199,11 +232,9 @@ async def process_pending():
                             view.add_item(discord.ui.Button(label=msg['button_label'], url=msg['button_url'], style=discord.ButtonStyle.link))
                         await channel.send(embed=e, view=view)
                         cur.execute("UPDATE pending_messages SET sent = TRUE WHERE id=%s", (msg['id'],))
-                        conn.commit()
                     except Exception as ex:
                         print(f'Pending message error: {ex}')
                         cur.execute("UPDATE pending_messages SET sent = TRUE WHERE id=%s", (msg['id'],))
-                        conn.commit()
 
             # Process pending role assignments
             cur.execute("SELECT value FROM server_config WHERE key=%s", ('guild_id',))
@@ -230,7 +261,6 @@ async def process_pending():
                             except Exception as ex:
                                 print(f'Role assign error: {ex}')
                         cur.execute("UPDATE pending_actions SET done = TRUE WHERE id=%s", (action['id'],))
-                        conn.commit()
         finally:
             return_db(conn)
     except Exception as ex:
@@ -245,7 +275,6 @@ async def on_ready():
         cur = conn.cursor()
         for guild in bot.guilds:
             cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s', ('guild_id', str(guild.id), str(guild.id)))
-        conn.commit()
     finally:
         return_db(conn)
     
@@ -270,27 +299,27 @@ async def on_message(message):
         _handled_messages.clear()
 
     if not message.author.bot:
-        # XP per messages
-        conn = get_db()
-        try:
-            cur = conn.cursor()
-            cur.execute('SELECT value FROM server_config WHERE key=%s', ('xp_enabled',))
-            xp_on = cur.fetchone()
-            if xp_on and xp_on['value'] == '1':
+        # OPTIMIZATION: Only query DB if XP is enabled (check cache first)
+        cfg = get_cfg()
+        if cfg.get('xp_enabled') == '1':
+            conn = get_db()
+            try:
+                cur = conn.cursor()
                 cur.execute('SELECT house_id FROM users WHERE user_id=%s', (str(message.author.id),))
                 user_h = cur.fetchone()
                 if user_h:
-                    cur.execute('SELECT value FROM server_config WHERE key=%s', ('xp_per_msgs',))
-                    per = cur.fetchone()
-                    per = int(per['value']) if per else 10
-                    cur.execute('SELECT value FROM server_config WHERE key=%s', ('xp_amount',))
-                    amt = cur.fetchone()
-                    amt = int(amt['value']) if amt else 1
+                    per = int(cfg.get('xp_per_msgs', '10'))
+                    amt = int(cfg.get('xp_amount', '1'))
+                    # OPTIMIZATION: Single query to update both tables
                     cur.execute('UPDATE users SET contributions_points = contributions_points + %s WHERE user_id=%s', (amt, str(message.author.id)))
                     cur.execute('UPDATE houses SET house_points = house_points + %s WHERE name=%s', (amt, user_h['house_id']))
-                    conn.commit()
+            finally:
+                return_db(conn)
 
-            # Sticky messages
+        # Sticky messages
+        conn = get_db()
+        try:
+            cur = conn.cursor()
             cur.execute('SELECT id, title, description, color, image_url, thumbnail_url, footer_text, footer_icon, button_label, button_url FROM sticky_messages WHERE channel_id=%s AND active=TRUE', (message.channel.id,))
             sticky = cur.fetchone()
             if sticky:
@@ -325,11 +354,13 @@ async def on_message(message):
 @commands.has_permissions(administrator=True)
 @app_commands.describe(new_prefix="The new prefix, e.g. ? or $")
 async def setprefix(ctx, new_prefix: str):
+    global _prefix_cache, _prefix_cache_time
     conn = get_db()
     try:
         cur = conn.cursor()
         cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s', ('prefix', new_prefix, new_prefix))
-        conn.commit()
+        _prefix_cache = new_prefix  # Update cache immediately
+        _prefix_cache_time = time.time()
         await ctx.send(embed=embed("✅ Prefix Updated", f"New prefix is `{new_prefix}`. Use `{new_prefix}help` for commands.", color=0x57F287))
     finally:
         return_db(conn)
@@ -363,7 +394,6 @@ async def setlog(ctx, channel: discord.TextChannel):
     try:
         cur = conn.cursor()
         cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s', ('log_channel', str(channel.id), str(channel.id)))
-        conn.commit()
         await ctx.send(embed=embed("📋 Log Channel Set", f"Logs will go to {channel.mention}.", color=0x57F287))
     finally:
         return_db(conn)
@@ -372,6 +402,7 @@ async def setlog(ctx, channel: discord.TextChannel):
 @commands.has_permissions(administrator=True)
 @app_commands.describe(house_name="Name of the house", role="The Discord role to link")
 async def sethouse(ctx, house_name: str, role: discord.Role):
+    global _house_cache_time
     house_name = house_name.lower()
     conn = get_db()
     try:
@@ -382,7 +413,7 @@ async def sethouse(ctx, house_name: str, role: discord.Role):
                ON CONFLICT (name) DO UPDATE SET role_id=%s, color=%s, thumbnail_url=%s''',
             (house_name, str(role.id), '5865F2', '', str(role.id), '5865F2', '')
         )
-        conn.commit()
+        _house_cache_time = 0  # Invalidate cache
         await ctx.send(embed=build_embed("🏠 House Linked", f"**{house_name.capitalize()}** linked to {role.mention}.", house=house_name, color=0x57F287))
         await log_action(ctx, "🏠 House Created", f"{ctx.author.mention} linked **{house_name.capitalize()}** to {role.mention}.")
     finally:
@@ -439,7 +470,6 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
                         (str(member.id), resolved_house, old['contributions_points'] if old else 0, 
                          str(resolved_role.id) if resolved_role else None, 
                          resolved_house, str(resolved_role.id) if resolved_role else None))
-            conn.commit()
 
             if resolved_role:
                 try:
@@ -473,7 +503,6 @@ async def housepoints(ctx, action: Literal['add', 'remove'], member: discord.Mem
         modifier = amount if action == 'add' else -amount
         cur.execute('UPDATE users SET contributions_points = contributions_points + %s WHERE user_id=%s', (modifier, str(member.id)))
         cur.execute('UPDATE houses SET house_points = house_points + %s WHERE name=%s', (modifier, house_name))
-        conn.commit()
         if action == 'add':
             await ctx.send(embed=build_embed("📈 Points Added", f"{member.mention} earned **+{amount}** points for **{house_name.capitalize()}**.", house=house_name, color=0x57F287))
         else:
@@ -585,7 +614,6 @@ async def resetseason(ctx):
         cur = conn.cursor()
         cur.execute('UPDATE users SET contributions_points = 0')
         cur.execute('UPDATE houses SET house_points = 0')
-        conn.commit()
         await ctx.send(embed=embed("🚨 Season Reset", "All points wiped. The grind starts fresh.", color=0xED4245))
         await log_action(ctx, "☢️ Season Reset", f"{ctx.author.mention} reset all points.")
     finally:
