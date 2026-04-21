@@ -68,14 +68,23 @@ bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 # Deduplication guard
 _handled_messages: set = set()
 
+# Config cache (refreshed every 60 seconds)
+_config_cache = {}
+_config_cache_time = 0
+
 # --- Embed helpers ---
 def get_cfg():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute('SELECT key, value FROM server_config')
-    rows = cur.fetchall()
-    return_db(conn)
-    return {r['key']: r['value'] for r in rows}
+    global _config_cache, _config_cache_time
+    now = time.time()
+    if now - _config_cache_time > 60:  # Cache for 60 seconds
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT key, value FROM server_config')
+        rows = cur.fetchall()
+        return_db(conn)
+        _config_cache = {r['key']: r['value'] for r in rows}
+        _config_cache_time = now
+    return _config_cache
 
 def build_embed(title, desc, color=None, house=None):
     cfg = get_cfg()
@@ -307,6 +316,27 @@ async def setprefix(ctx, new_prefix: str):
     return_db(conn)
     await ctx.send(embed=embed("✅ Prefix Updated", f"New prefix is `{new_prefix}`. Use `{new_prefix}help` for commands.", color=0x57F287))
 
+@bot.hybrid_command(name="dbtest", description="Test database connection speed")
+async def dbtest(ctx):
+    import time
+    start = time.time()
+    conn = get_db()
+    after_connect = time.time()
+    cur = conn.cursor()
+    cur.execute('SELECT 1')
+    after_query = time.time()
+    return_db(conn)
+    end = time.time()
+    
+    await ctx.send(embed=embed(
+        "🔍 DB Connection Test",
+        f"**Get connection:** {(after_connect-start)*1000:.0f}ms\n"
+        f"**Query:** {(after_query-after_connect)*1000:.0f}ms\n"
+        f"**Return to pool:** {(end-after_query)*1000:.0f}ms\n"
+        f"**Total:** {(end-start)*1000:.0f}ms",
+        color=0x57F287
+    ))
+
 @bot.hybrid_command(name="setlog", description="Set the log channel")
 @commands.has_permissions(administrator=True)
 @app_commands.describe(channel="The channel for bot logs")
@@ -340,60 +370,70 @@ async def sethouse(ctx, house_name: str, role: discord.Role):
 @commands.has_permissions(administrator=True)
 @app_commands.describe(member="The member to assign", house_name="House name to assign to", role="House role to assign via")
 async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, role: Optional[discord.Role] = None):
-    if not house_name and not role:
-        return await ctx.send(embed=embed("❌ Missing Info", "Provide a house name or a role.\nExample: `/assign @user Phoenix`", color=0xED4245))
+    try:
+        if not house_name and not role:
+            return await ctx.send(embed=embed("❌ Missing Info", "Provide a house name or a role.\nExample: `/assign @user Phoenix`", color=0xED4245))
 
-    resolved_house = None
-    resolved_role = None
-    conn = get_db()
-    cur = conn.cursor()
+        resolved_house = None
+        resolved_role = None
+        conn = get_db()
+        cur = conn.cursor()
 
-    if role:
-        cur.execute('SELECT name FROM houses WHERE role_id=%s', (str(role.id),))
-        res = cur.fetchone()
-        if not res:
+        if role:
+            print(f"DEBUG: Looking for house with role_id={role.id}")
+            cur.execute('SELECT name FROM houses WHERE role_id=%s', (str(role.id),))
+            res = cur.fetchone()
+            print(f"DEBUG: Found house: {res}")
+            if not res:
+                return_db(conn)
+                return await ctx.send(embed=embed("❌ No House Found", f"{role.mention} isn't linked to any house. Use `sethouse` first.", color=0xED4245))
+            resolved_house = res['name']
+            resolved_role = role
+        elif house_name:
+            resolved_house = house_name.lower()
+            print(f"DEBUG: Looking for house with name={resolved_house}")
+            cur.execute('SELECT role_id FROM houses WHERE name=%s', (resolved_house,))
+            res = cur.fetchone()
+            print(f"DEBUG: Found role_id: {res}")
+            if not res:
+                return_db(conn)
+                return await ctx.send(embed=embed("❌ House Not Found", f"**{house_name}** doesn't exist. Use `sethouse` first.", color=0xED4245))
+            resolved_role = ctx.guild.get_role(int(res['role_id'])) if res['role_id'] else None
+
+        cur.execute('SELECT house_id, contributions_points, role_id FROM users WHERE user_id=%s', (str(member.id),))
+        old = cur.fetchone()
+
+        if old and old['house_id'] == resolved_house:
             return_db(conn)
-            return await ctx.send(embed=embed("❌ No House Found", f"{role.mention} isn't linked to any house. Use `sethouse` first.", color=0xED4245))
-        resolved_house = res['name']
-        resolved_role = role
-    elif house_name:
-        resolved_house = house_name.lower()
-        cur.execute('SELECT role_id FROM houses WHERE name=%s', (resolved_house,))
-        res = cur.fetchone()
-        if not res:
-            return_db(conn)
-            return await ctx.send(embed=embed("❌ House Not Found", f"**{house_name}** doesn't exist. Use `sethouse` first.", color=0xED4245))
-        resolved_role = ctx.guild.get_role(int(res['role_id'])) if res['role_id'] else None
+            return await ctx.send(embed=embed("⚠️ Already in House", f"{member.mention} is already in **{resolved_house.capitalize()}**.", color=0xFEE75C))
 
-    cur.execute('SELECT house_id, contributions_points, role_id FROM users WHERE user_id=%s', (str(member.id),))
-    old = cur.fetchone()
+        if old and old['role_id']:
+            old_role = ctx.guild.get_role(int(old['role_id']))
+            if old_role:
+                try:
+                    await member.remove_roles(old_role)
+                except discord.Forbidden:
+                    pass
 
-    if old and old['house_id'] == resolved_house:
+        cur.execute('INSERT INTO users (user_id, house_id, contributions_points, role_id) VALUES (%s, %s, %s, %s) ON CONFLICT (user_id) DO UPDATE SET house_id=%s, role_id=%s',
+                    (str(member.id), resolved_house, old['contributions_points'] if old else 0, str(resolved_role.id) if resolved_role else None, resolved_house, str(resolved_role.id) if resolved_role else None))
+        conn.commit()
         return_db(conn)
-        return await ctx.send(embed=embed("⚠️ Already in House", f"{member.mention} is already in **{resolved_house.capitalize()}**.", color=0xFEE75C))
 
-    if old and old['role_id']:
-        old_role = ctx.guild.get_role(int(old['role_id']))
-        if old_role:
+        if resolved_role:
             try:
-                await member.remove_roles(old_role)
+                await member.add_roles(resolved_role)
             except discord.Forbidden:
-                pass
+                await ctx.send(embed=embed("⚠️ Role Error", "Couldn't assign the role — bot role must be above the house role.", color=0xFEE75C))
 
-    cur.execute('INSERT INTO users (user_id, house_id, contributions_points, role_id) VALUES (%s, %s, %s, %s) ON CONFLICT (user_id) DO UPDATE SET house_id=%s, role_id=%s',
-                (str(member.id), resolved_house, old['contributions_points'] if old else 0, str(resolved_role.id) if resolved_role else None, resolved_house, str(resolved_role.id) if resolved_role else None))
-    conn.commit()
-    return_db(conn)
-
-    if resolved_role:
-        try:
-            await member.add_roles(resolved_role)
-        except discord.Forbidden:
-            await ctx.send(embed=embed("⚠️ Role Error", "Couldn't assign the role — bot role must be above the house role.", color=0xFEE75C))
-
-    action = "moved to" if old and old['house_id'] else "placed in"
-    await ctx.send(embed=build_embed("✅ Player Assigned", f"{member.mention} has been {action} **{resolved_house.capitalize()}**.", house=resolved_house, color=0x57F287))
-    await log_action(ctx, "🏠 Assignment", f"{ctx.author.mention} {action} {member.mention} → **{resolved_house.capitalize()}**.")
+        action = "moved to" if old and old['house_id'] else "placed in"
+        await ctx.send(embed=build_embed("✅ Player Assigned", f"{member.mention} has been {action} **{resolved_house.capitalize()}**.", house=resolved_house, color=0x57F287))
+        await log_action(ctx, "🏠 Assignment", f"{ctx.author.mention} {action} {member.mention} → **{resolved_house.capitalize()}**.")
+    except Exception as e:
+        print(f"ERROR in assign: {e}")
+        import traceback
+        traceback.print_exc()
+        await ctx.send(embed=embed("❌ Error", f"Something went wrong: {str(e)}", color=0xED4245))
 
 @bot.hybrid_command(name="housepoints", description="Add or remove points from a member")
 @commands.has_permissions(administrator=True)
