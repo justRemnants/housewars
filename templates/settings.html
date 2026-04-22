@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %} — Settings{% endblock %}
 {% block page_title %}Settings{% endblock %}
-{% block page_sub %}Configure prefix, XP, and embed appearance{% endblock %}
+{% block page_sub %}Configure prefix, XP, embed appearance, and log channel{% endblock %}
 
 {% block head %}
 <style>
@@ -12,7 +12,6 @@
 .dc-author-name { font-size: 12px; font-weight: 700; color: #e3e5e8; }
 .dc-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 5px; }
 .dc-desc { font-size: 14px; color: #dbdee1; line-height: 1.5; }
-.dc-image { max-width: 100%; border-radius: 4px; margin-top: 10px; max-height: 200px; object-fit: cover; }
 .dc-thumb { position: absolute; top: 12px; right: 12px; width: 60px; height: 60px; border-radius: 4px; object-fit: cover; }
 .dc-footer { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #3f4248; }
 .dc-footer-icon { width: 16px; height: 16px; object-fit: cover; border-radius: 50%; }
@@ -25,7 +24,6 @@
 {% block content %}
 <div class="grid-2">
     <div>
-        <!-- Bot Settings -->
         <div class="card">
             <div class="card-header"><div><h3>⚙️ Bot Settings</h3></div></div>
 
@@ -35,6 +33,15 @@
                     <label>Prefix</label>
                     <input type="text" id="prefix" value="{{ cfg.get('prefix', '!') }}" maxlength="5" style="max-width:100px">
                     <p class="input-hint">Default is <code>!</code>. Example: <code>?</code> or <code>$</code></p>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h4>Log Channel <span style="font-size:11px;color:var(--muted)">(where points logs are posted)</span></h4>
+                <div class="form-group">
+                    <label>Channel</label>
+                    <div id="logChannelSelect"></div>
+                    <p class="input-hint">The bot will post a rich embed for every points change</p>
                 </div>
             </div>
 
@@ -66,34 +73,34 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Default Accent Colour</label>
-                        <div class="flex gap-8 items-center">
-                            <input type="color" id="embed_color_picker" value="#{{ cfg.get('embed_color','5865F2') if cfg.get('embed_color','5865F2')|length == 6 else '5865F2' }}" style="width:48px;flex-shrink:0">
-                            <input type="text" id="embed_color" value="#{{ cfg.get('embed_color','5865F2') }}">
+                        <div class="color-picker-wrap">
+                            <div class="color-swatch-btn" id="embed_swatch" style="background:#{{ cfg.get('embed_color','5865F2') }}"></div>
+                            <input type="text" id="embed_color" value="#{{ cfg.get('embed_color','5865F2') }}" style="font-family:monospace" oninput="updatePreview()">
                         </div>
                     </div>
                     <div class="form-group">
                         <label>Thumbnail URL</label>
-                        <input type="text" id="embed_thumbnail" value="{{ cfg.get('embed_thumbnail','') }}" placeholder="https://...">
+                        <input type="text" id="embed_thumbnail" value="{{ cfg.get('embed_thumbnail','') }}" placeholder="https://..." oninput="updatePreview()">
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Footer Text</label>
-                        <input type="text" id="embed_footer_text" value="{{ cfg.get('embed_footer_text','Ice Dodo | No Cap') }}" placeholder="Ice Dodo Events Bot">
+                        <input type="text" id="embed_footer_text" value="{{ cfg.get('embed_footer_text','Ice Dodo | No Cap') }}" placeholder="Ice Dodo Events Bot" oninput="updatePreview()">
                     </div>
                     <div class="form-group">
                         <label>Footer Icon URL</label>
-                        <input type="text" id="embed_footer_icon" value="{{ cfg.get('embed_footer_icon','') }}" placeholder="https://...">
+                        <input type="text" id="embed_footer_icon" value="{{ cfg.get('embed_footer_icon','') }}" placeholder="https://..." oninput="updatePreview()">
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Author Name</label>
-                        <input type="text" id="embed_author_name" value="{{ cfg.get('embed_author_name','') }}" placeholder="e.g. Ice Dodo Events Bot">
+                        <input type="text" id="embed_author_name" value="{{ cfg.get('embed_author_name','') }}" placeholder="e.g. Ice Dodo Events Bot" oninput="updatePreview()">
                     </div>
                     <div class="form-group">
                         <label>Author Icon URL</label>
-                        <input type="text" id="embed_author_icon" value="{{ cfg.get('embed_author_icon','') }}" placeholder="https://...">
+                        <input type="text" id="embed_author_icon" value="{{ cfg.get('embed_author_icon','') }}" placeholder="https://..." oninput="updatePreview()">
                     </div>
                 </div>
             </div>
@@ -103,7 +110,6 @@
     </div>
 
     <div>
-        <!-- Live Preview -->
         <div class="card" style="position:sticky;top:24px">
             <div class="card-header"><div><h3>👁 Live Embed Preview</h3><p>Updates as you type</p></div></div>
             <div class="preview-wrap">
@@ -112,11 +118,11 @@
                         <img class="dc-author-icon" id="previewAuthorIcon" src="" alt="">
                         <span class="dc-author-name" id="previewAuthorName"></span>
                     </div>
-                    <div class="dc-title">📈 Points Added</div>
-                    <div class="dc-desc">@Player earned <strong>+50</strong> points for <strong>House Alpha</strong>.</div>
+                    <div class="dc-title" id="previewTitle">📈 Points Added</div>
+                    <div class="dc-desc" id="previewDesc">@Player earned <strong>+50</strong> points for <strong>House Alpha</strong>.</div>
                     <img class="dc-thumb" id="previewThumb" src="" alt="" style="display:none">
                     <div class="dc-footer" id="previewFooter">
-                        <img class="dc-footer-icon" id="previewFooterIcon" src="" alt="" style="display:none;background:transparent">
+                        <img class="dc-footer-icon" id="previewFooterIcon" src="" alt="" style="display:none">
                         <span class="dc-footer-text" id="previewFooterText">Ice Dodo | No Cap</span>
                     </div>
                 </div>
@@ -127,7 +133,7 @@
                     <button class="btn btn-ghost btn-sm" onclick="setEx('points')">Points</button>
                     <button class="btn btn-ghost btn-sm" onclick="setEx('assign')">Assign</button>
                     <button class="btn btn-ghost btn-sm" onclick="setEx('board')">Leaderboard</button>
-                    <button class="btn btn-ghost btn-sm" onclick="setEx('error')">Error</button>
+                    <button class="btn btn-ghost btn-sm" onclick="setEx('log')">Log Entry</button>
                 </div>
             </div>
         </div>
@@ -138,12 +144,28 @@
 {% block scripts %}
 <script>
 const examples = {
-    points: { title:'📈 Points Added', desc:'@Player earned <strong>+50</strong> points for <strong>House Alpha</strong>.' },
+    points: { title:'📈 Points Added', desc:'@Player earned <strong>+50</strong> points for <strong>House Alpha</strong>.\n<em style="font-size:12px;color:#949ba4">Reason: Won the trivia night</em>' },
     assign: { title:'✅ Player Assigned', desc:'@Player has been placed in <strong>House Alpha</strong>.' },
-    board: { title:'🏆 House Leaderboard', desc:'🥇 <strong>Alpha</strong> — 350 pts\n🥈 <strong>Beta</strong> — 210 pts\n🥉 <strong>Gamma</strong> — 90 pts' },
-    error: { title:'❌ Error', desc:'Something went wrong. Try again.' }
+    board:  { title:'🏆 House Leaderboard', desc:'🥇 <strong>Alpha</strong> — 350 pts\n🥈 <strong>Beta</strong> — 210 pts\n🥉 <strong>Gamma</strong> — 90 pts' },
+    log:    { title:'📋 Points Log', desc:'👤 <strong>@Player</strong> (+50 pts)\n🏠 <strong>House Alpha</strong>\n📝 Won the trivia night\n🕒 Today at 3:45 PM\n👮 By: @Admin' }
 };
 let xpEnabled = {{ '1' if cfg.get('xp_enabled') == '1' else '0' }};
+let logChannelSel = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Init colour picker
+    createColorPicker('embed_swatch', 'embed_color', updatePreview);
+
+    // Load channels
+    const gd = await getGuildData();
+    const cOpts = channelOptions(gd.channels || []);
+    logChannelSel = createSearchSelect('logChannelSelect', cOpts, null, 'Search channel…');
+    // Set saved value
+    const savedChannel = '{{ cfg.get("log_channel", "") }}';
+    if(savedChannel && logChannelSel) logChannelSel.setValue(savedChannel);
+
+    updatePreview();
+});
 
 function updatePreview() {
     const color = document.getElementById('embed_color').value || '#5865f2';
@@ -157,7 +179,7 @@ function updatePreview() {
     document.getElementById('previewFooterText').textContent = footerText;
 
     const fiEl = document.getElementById('previewFooterIcon');
-    if (footerIcon) { fiEl.src = footerIcon; fiEl.style.display = 'block'; fiEl.style.background = 'transparent'; }
+    if (footerIcon) { fiEl.src = footerIcon; fiEl.style.display = 'block'; }
     else fiEl.style.display = 'none';
 
     const thumbEl = document.getElementById('previewThumb');
@@ -172,19 +194,13 @@ function updatePreview() {
         if (authorIcon) { aiEl.src = authorIcon; aiEl.style.display = 'block'; }
         else aiEl.style.display = 'none';
     } else authorEl.style.display = 'none';
-
-    document.getElementById('embed_color_picker').value = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#5865f2';
 }
 
 function setEx(type) {
     const ex = examples[type];
-    document.querySelector('.dc-title').textContent = ex.title;
-    document.querySelector('.dc-desc').innerHTML = ex.desc.replace(/\n/g,'<br>');
+    document.getElementById('previewTitle').textContent = ex.title;
+    document.getElementById('previewDesc').innerHTML = ex.desc.replace(/\n/g,'<br>');
 }
-
-document.getElementById('embed_color_picker').addEventListener('input', e => { document.getElementById('embed_color').value = e.target.value; updatePreview(); });
-document.getElementById('embed_color').addEventListener('input', e => { if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)) document.getElementById('embed_color_picker').value = e.target.value; updatePreview(); });
-['embed_footer_text','embed_footer_icon','embed_thumbnail','embed_author_name','embed_author_icon'].forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
 
 function toggleXP() {
     xpEnabled = xpEnabled === 1 ? 0 : 1;
@@ -199,6 +215,7 @@ async function saveAll() {
     const color = document.getElementById('embed_color').value.replace('#','');
     let colorInt;
     try { colorInt = parseInt(color, 16).toString(); } catch { colorInt = '5865F2'; }
+    const logChannel = logChannelSel?.getValue() || '';
     const payload = {
         prefix: document.getElementById('prefix').value || '!',
         xp_enabled: xpEnabled.toString(),
@@ -210,6 +227,7 @@ async function saveAll() {
         embed_thumbnail: document.getElementById('embed_thumbnail').value,
         embed_author_name: document.getElementById('embed_author_name').value,
         embed_author_icon: document.getElementById('embed_author_icon').value,
+        log_channel: logChannel,
     };
     const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
     if (r.ok) toast('Settings saved! Bot picks up changes instantly.');
