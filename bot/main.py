@@ -12,32 +12,25 @@ import psycopg2.extras
 from psycopg2 import pool
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-# --- Optimized Supabase / PostgreSQL connection pooling ---
+# --- Connection pool ---
 connection_pool = None
 
 def init_pool():
     global connection_pool
-    # OPTIMIZATION: Increased min connections for faster availability
-    # OPTIMIZATION: Set connection options for better performance
     connection_pool = psycopg2.pool.SimpleConnectionPool(
-        2,  # Min connections (increased from 1)
-        15,  # Max connections (increased from 10)
+        2, 15,
         os.environ['SUPABASE_URL'],
         cursor_factory=psycopg2.extras.RealDictCursor,
-        # OPTIMIZATION: Disable autocommit for batch operations
-        options='-c statement_timeout=5000'  # 5 second query timeout
+        options='-c statement_timeout=5000'
     )
     print("✅ Database connection pool initialized (2-15 connections)")
 
 def get_db():
-    """Get a database connection from the pool"""
     conn = connection_pool.getconn()
-    # OPTIMIZATION: Set session to autocommit for reads
     conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     return conn
 
 def return_db(conn):
-    """Return connection to pool"""
     connection_pool.putconn(conn)
 
 # --- Single-instance lock ---
@@ -67,7 +60,6 @@ _prefix_cache_time = 0
 async def get_prefix(bot, message):
     global _prefix_cache, _prefix_cache_time
     now = time.time()
-    # OPTIMIZATION: Cache prefix for 5 minutes (changes rarely)
     if now - _prefix_cache_time > 300:
         conn = get_db()
         try:
@@ -85,18 +77,18 @@ intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 
-# Deduplication guard
 _handled_messages: set = set()
 
-# OPTIMIZATION: Extended config cache (120 seconds instead of 60)
 _config_cache = {}
 _config_cache_time = 0
+_house_cache = {}
+_house_cache_time = 0
 
-# --- Embed helpers with aggressive caching ---
+# --- Config helpers ---
 def get_cfg():
     global _config_cache, _config_cache_time
     now = time.time()
-    if now - _config_cache_time > 120:  # Cache for 2 minutes
+    if now - _config_cache_time > 120:
         conn = get_db()
         try:
             cur = conn.cursor()
@@ -108,14 +100,9 @@ def get_cfg():
             return_db(conn)
     return _config_cache
 
-# OPTIMIZATION: House data cache
-_house_cache = {}
-_house_cache_time = 0
-
 def get_house_data(house_name):
     global _house_cache, _house_cache_time
     now = time.time()
-    # Refresh cache every 60 seconds
     if now - _house_cache_time > 60:
         conn = get_db()
         try:
@@ -131,9 +118,7 @@ def get_house_data(house_name):
 def build_embed(title, desc, color=None, house=None):
     cfg = get_cfg()
     house_thumb = None
-
     if house:
-        # OPTIMIZATION: Use cached house data instead of querying
         h = get_house_data(house)
         if h:
             if h['color'] and color is None:
@@ -142,32 +127,72 @@ def build_embed(title, desc, color=None, house=None):
                 except ValueError:
                     pass
             house_thumb = h['thumbnail_url'] if h['thumbnail_url'] else None
-
     if color is None:
         raw = cfg.get('embed_color')
         color = int(raw) if raw and str(raw).isdigit() else 0x5865F2
-
     e = discord.Embed(title=title, description=desc, color=color)
-
     footer_text = cfg.get('embed_footer_text', 'Ice Dodo | No Cap')
     footer_icon = cfg.get('embed_footer_icon', '')
     e.set_footer(text=footer_text, icon_url=footer_icon) if footer_icon else e.set_footer(text=footer_text)
-
     thumb = house_thumb or cfg.get('embed_thumbnail', '')
     if thumb:
         e.set_thumbnail(url=thumb)
-
     author_name = cfg.get('embed_author_name', '')
     author_icon = cfg.get('embed_author_icon', '')
     if author_name and author_icon:
         e.set_author(name=author_name, icon_url=author_icon)
     elif author_name:
         e.set_author(name=author_name)
-
     return e
 
 def embed(title, desc, color=None):
     return build_embed(title, desc, color=color)
+
+# --- Log helpers ---
+def write_log(cur, user_id, target_username, target_avatar, amount, reason, action, house_id, actor_id, actor_name, actor_avatar=None):
+    try:
+        cur.execute(
+            '''INSERT INTO logs (user_id, target_username, target_avatar, amount, reason,
+                                 action, house_id, actor_id, actor_username, actor_avatar)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+            (str(user_id), target_username, target_avatar, amount, reason,
+             action, house_id,
+             str(actor_id) if actor_id else None,
+             actor_name, actor_avatar)
+        )
+    except Exception as e:
+        print(f'Log write error: {e}')
+
+async def post_log_to_channel(house_id, member_display, amount, reason, action, actor_name):
+    """Post a rich points-change embed to the configured log channel."""
+    cfg = get_cfg()
+    log_ch = cfg.get('log_channel')
+    if not log_ch:
+        return
+    try:
+        channel = bot.get_channel(int(log_ch))
+        if not channel:
+            channel = await bot.fetch_channel(int(log_ch))
+        emoji = '📈' if action == 'add' else '📉'
+        sign  = '+' if action == 'add' else '-'
+        color = 0x57F287 if action == 'add' else 0xED4245
+        desc_lines = [
+            f"**Member:** {member_display or '—'}",
+            f"**House:** {(house_id or '—').capitalize()}",
+            f"**Points:** `{sign}{amount}`",
+        ]
+        if reason:
+            desc_lines.append(f"**Reason:** {reason}")
+        desc_lines.append(f"**By:** {actor_name or '—'}")
+        log_embed = discord.Embed(
+            title=f'{emoji} Points {"Added" if action == "add" else "Removed"}',
+            description='\n'.join(desc_lines),
+            color=color
+        )
+        log_embed.set_footer(text='Ice Dodo Points Log')
+        await channel.send(embed=log_embed)
+    except Exception as e:
+        print(f'Log channel post error: {e}')
 
 async def log_action(ctx_or_guild, title, desc, guild=None):
     conn = get_db()
@@ -176,7 +201,6 @@ async def log_action(ctx_or_guild, title, desc, guild=None):
         cur.execute('SELECT value FROM server_config WHERE key = %s', ('log_channel',))
         res = cur.fetchone()
         if res:
-            g = guild or (ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else None)
             channel = bot.get_channel(int(res['value']))
             if channel:
                 await channel.send(embed=embed(title, desc))
@@ -203,7 +227,6 @@ async def process_pending():
                         print(f'Cannot find channel {msg["channel_id"]}: {fetch_err}')
                         cur.execute("UPDATE pending_messages SET sent = TRUE WHERE id=%s", (msg['id'],))
                         continue
-                
                 if channel:
                     try:
                         ed = json.loads(msg['embed_json'])
@@ -212,20 +235,13 @@ async def process_pending():
                             color_int = int(color_val) if str(color_val).isdigit() else int(str(color_val).lstrip('#'), 16)
                         except:
                             color_int = 0x5865F2
-                        e = discord.Embed(title=ed.get('title', ''), description=ed.get('description', ''), color=color_int)
-                        if ed.get('image_url'):
-                            e.set_image(url=ed['image_url'])
-                        if ed.get('thumbnail_url'):
-                            e.set_thumbnail(url=ed['thumbnail_url'])
-                        ft = ed.get('footer_text', '')
-                        fi = ed.get('footer_icon', '')
-                        if ft:
-                            e.set_footer(text=ft, icon_url=fi) if fi else e.set_footer(text=ft)
+                        e = discord.Embed(title=ed.get('title',''), description=ed.get('description',''), color=color_int)
+                        if ed.get('image_url'):     e.set_image(url=ed['image_url'])
+                        if ed.get('thumbnail_url'): e.set_thumbnail(url=ed['thumbnail_url'])
+                        ft, fi = ed.get('footer_text',''), ed.get('footer_icon','')
+                        if ft: e.set_footer(text=ft, icon_url=fi) if fi else e.set_footer(text=ft)
                         if ed.get('author_name'):
-                            if ed.get('author_icon'):
-                                e.set_author(name=ed['author_name'], icon_url=ed['author_icon'])
-                            else:
-                                e.set_author(name=ed['author_name'])
+                            e.set_author(name=ed['author_name'], icon_url=ed['author_icon']) if ed.get('author_icon') else e.set_author(name=ed['author_name'])
                         view = None
                         if msg['button_label'] and msg['button_url']:
                             view = discord.ui.View()
@@ -274,12 +290,11 @@ async def on_ready():
     try:
         cur = conn.cursor()
         for guild in bot.guilds:
-            cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s', ('guild_id', str(guild.id), str(guild.id)))
+            cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s',
+                        ('guild_id', str(guild.id), str(guild.id)))
     finally:
         return_db(conn)
-    
     process_pending.start()
-    
     try:
         synced = await bot.tree.sync()
         print(f'Synced {len(synced)} slash commands')
@@ -290,8 +305,6 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:
         return
-
-    # Drop duplicate
     if message.id in _handled_messages:
         return
     _handled_messages.add(message.id)
@@ -299,7 +312,6 @@ async def on_message(message):
         _handled_messages.clear()
 
     if not message.author.bot:
-        # OPTIMIZATION: Only query DB if XP is enabled (check cache first)
         cfg = get_cfg()
         if cfg.get('xp_enabled') == '1':
             conn = get_db()
@@ -308,9 +320,7 @@ async def on_message(message):
                 cur.execute('SELECT house_id FROM users WHERE user_id=%s', (str(message.author.id),))
                 user_h = cur.fetchone()
                 if user_h:
-                    per = int(cfg.get('xp_per_msgs', '10'))
                     amt = int(cfg.get('xp_amount', '1'))
-                    # OPTIMIZATION: Single query to update both tables
                     cur.execute('UPDATE users SET contributions_points = contributions_points + %s WHERE user_id=%s', (amt, str(message.author.id)))
                     cur.execute('UPDATE houses SET house_points = house_points + %s WHERE name=%s', (amt, user_h['house_id']))
             finally:
@@ -328,13 +338,10 @@ async def on_message(message):
                 except Exception:
                     color_int = 0x5865F2
                 se = discord.Embed(title=sticky['title'] or '', description=sticky['description'] or '', color=color_int)
-                if sticky['image_url']:
-                    se.set_image(url=sticky['image_url'])
-                if sticky['thumbnail_url']:
-                    se.set_thumbnail(url=sticky['thumbnail_url'])
+                if sticky['image_url']:     se.set_image(url=sticky['image_url'])
+                if sticky['thumbnail_url']: se.set_thumbnail(url=sticky['thumbnail_url'])
                 ft, fi = sticky['footer_text'], sticky['footer_icon']
-                if ft:
-                    se.set_footer(text=ft, icon_url=fi) if fi else se.set_footer(text=ft)
+                if ft: se.set_footer(text=ft, icon_url=fi) if fi else se.set_footer(text=ft)
                 view = None
                 if sticky['button_label'] and sticky['button_url']:
                     view = discord.ui.View(timeout=None)
@@ -342,7 +349,7 @@ async def on_message(message):
                 try:
                     await message.channel.send(embed=se, view=view)
                 except Exception as sticky_err:
-                    print(f'Sticky send error in channel {message.channel.id}: {sticky_err}')
+                    print(f'Sticky send error: {sticky_err}')
         finally:
             return_db(conn)
 
@@ -359,15 +366,14 @@ async def setprefix(ctx, new_prefix: str):
     try:
         cur = conn.cursor()
         cur.execute('INSERT INTO server_config (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value=%s', ('prefix', new_prefix, new_prefix))
-        _prefix_cache = new_prefix  # Update cache immediately
+        _prefix_cache = new_prefix
         _prefix_cache_time = time.time()
-        await ctx.send(embed=embed("✅ Prefix Updated", f"New prefix is `{new_prefix}`. Use `{new_prefix}help` for commands.", color=0x57F287))
+        await ctx.send(embed=embed("✅ Prefix Updated", f"New prefix is `{new_prefix}`.", color=0x57F287))
     finally:
         return_db(conn)
 
 @bot.hybrid_command(name="dbtest", description="Test database connection speed")
 async def dbtest(ctx):
-    import time
     start = time.time()
     conn = get_db()
     after_connect = time.time()
@@ -376,12 +382,10 @@ async def dbtest(ctx):
     after_query = time.time()
     return_db(conn)
     end = time.time()
-    
     await ctx.send(embed=embed(
         "🔍 DB Connection Test",
         f"**Get connection:** {(after_connect-start)*1000:.0f}ms\n"
         f"**Query:** {(after_query-after_connect)*1000:.0f}ms\n"
-        f"**Return to pool:** {(end-after_query)*1000:.0f}ms\n"
         f"**Total:** {(end-start)*1000:.0f}ms",
         color=0x57F287
     ))
@@ -413,7 +417,7 @@ async def sethouse(ctx, house_name: str, role: discord.Role):
                ON CONFLICT (name) DO UPDATE SET role_id=%s, color=%s, thumbnail_url=%s''',
             (house_name, str(role.id), '5865F2', '', str(role.id), '5865F2', '')
         )
-        _house_cache_time = 0  # Invalidate cache
+        _house_cache_time = 0
         await ctx.send(embed=build_embed("🏠 House Linked", f"**{house_name.capitalize()}** linked to {role.mention}.", house=house_name, color=0x57F287))
         await log_action(ctx, "🏠 House Created", f"{ctx.author.mention} linked **{house_name.capitalize()}** to {role.mention}.")
     finally:
@@ -421,31 +425,56 @@ async def sethouse(ctx, house_name: str, role: discord.Role):
 
 @bot.hybrid_command(name="assign", description="Assign a member to a house")
 @commands.has_permissions(administrator=True)
-@app_commands.describe(member="The member to assign", house_name="House name to assign to", role="House role to assign via")
+@app_commands.describe(member="The member to assign", house_name="House name", role="House role (alternative to house name)")
 async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, role: Optional[discord.Role] = None):
     try:
+        # ── FIX: also check if a role mention was parsed as house_name ──
+        # When someone types "!assign @user @role", discord.py may give the
+        # raw role mention string as house_name instead of a Role object.
+        if house_name and not role:
+            # Try to extract a role ID from a mention like <@&1234567890>
+            import re
+            role_mention_match = re.match(r'^<@&(\d+)>$', house_name.strip())
+            if role_mention_match:
+                role_id = int(role_mention_match.group(1))
+                role = ctx.guild.get_role(role_id)
+                house_name = None  # clear it so we fall through to role path
+
         if not house_name and not role:
-            return await ctx.send(embed=embed("❌ Missing Info", "Provide a house name or a role.\nExample: `/assign @user Phoenix`", color=0xED4245))
+            return await ctx.send(embed=embed(
+                "❌ Missing Info",
+                "Provide a house name or role.\nExamples:\n`!assign @user Phoenix`\n`!assign @user @PhoenixRole`",
+                color=0xED4245
+            ))
 
         resolved_house = None
-        resolved_role = None
+        resolved_role  = None
         conn = get_db()
         try:
             cur = conn.cursor()
 
             if role:
+                # Assigned via role mention
                 cur.execute('SELECT name, role_id FROM houses WHERE role_id=%s', (str(role.id),))
                 res = cur.fetchone()
                 if not res:
-                    return await ctx.send(embed=embed("❌ No House Found", f"{role.mention} isn't linked to any house. Use `sethouse` first.", color=0xED4245))
+                    return await ctx.send(embed=embed(
+                        "❌ No House Found",
+                        f"{role.mention} isn't linked to any house. Use `/sethouse` first.",
+                        color=0xED4245
+                    ))
                 resolved_house = res['name']
-                resolved_role = role
+                resolved_role  = role
             elif house_name:
                 resolved_house = house_name.lower()
                 cur.execute('SELECT name, role_id FROM houses WHERE name=%s', (resolved_house,))
                 res = cur.fetchone()
                 if not res:
-                    return await ctx.send(embed=embed("❌ House Not Found", f"**{house_name}** doesn't exist. Use `sethouse` first.", color=0xED4245))
+                    return await ctx.send(embed=embed(
+                        "❌ House Not Found",
+                        f"**{house_name}** doesn't exist. Use `/sethouse` first.",
+                        color=0xED4245
+                    ))
                 if res['role_id']:
                     resolved_role = ctx.guild.get_role(int(res['role_id']))
 
@@ -455,6 +484,7 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
             if old and old['house_id'] == resolved_house:
                 return await ctx.send(embed=embed("⚠️ Already in House", f"{member.mention} is already in **{resolved_house.capitalize()}**.", color=0xFEE75C))
 
+            # Remove old role
             if old and old['role_id']:
                 old_role = ctx.guild.get_role(int(old['role_id']))
                 if old_role:
@@ -463,35 +493,37 @@ async def assign(ctx, member: discord.Member, house_name: Optional[str] = None, 
                     except discord.Forbidden:
                         pass
 
-            cur.execute('''INSERT INTO users (user_id, house_id, contributions_points, role_id) 
-                          VALUES (%s, %s, %s, %s) 
-                          ON CONFLICT (user_id) DO UPDATE 
-                          SET house_id=%s, role_id=%s''',
-                        (str(member.id), resolved_house, old['contributions_points'] if old else 0, 
-                         str(resolved_role.id) if resolved_role else None, 
-                         resolved_house, str(resolved_role.id) if resolved_role else None))
+            cur.execute(
+                '''INSERT INTO users (user_id, house_id, contributions_points, role_id)
+                   VALUES (%s, %s, %s, %s)
+                   ON CONFLICT (user_id) DO UPDATE SET house_id=%s, role_id=%s''',
+                (str(member.id), resolved_house,
+                 old['contributions_points'] if old else 0,
+                 str(resolved_role.id) if resolved_role else None,
+                 resolved_house,
+                 str(resolved_role.id) if resolved_role else None)
+            )
 
+            # Add new role
             if resolved_role:
                 try:
                     await member.add_roles(resolved_role)
                 except discord.Forbidden:
-                    await ctx.send(embed=embed("⚠️ Role Error", "Couldn't assign the role — bot role must be above the house role.", color=0xFEE75C))
+                    await ctx.send(embed=embed("⚠️ Role Error", "Couldn't assign role — bot role must be above the house role.", color=0xFEE75C))
 
-            action = "moved to" if old and old['house_id'] else "placed in"
-            await ctx.send(embed=build_embed("✅ Player Assigned", f"{member.mention} has been {action} **{resolved_house.capitalize()}**.", house=resolved_house, color=0x57F287))
-            await log_action(ctx, "🏠 Assignment", f"{ctx.author.mention} {action} {member.mention} → **{resolved_house.capitalize()}**.")
+            action_word = "moved to" if old and old['house_id'] else "placed in"
+            await ctx.send(embed=build_embed("✅ Player Assigned", f"{member.mention} has been {action_word} **{resolved_house.capitalize()}**.", house=resolved_house, color=0x57F287))
+            await log_action(ctx, "🏠 Assignment", f"{ctx.author.mention} {action_word} {member.mention} → **{resolved_house.capitalize()}**.")
         finally:
             return_db(conn)
     except Exception as e:
-        print(f"ERROR in assign: {e}")
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         await ctx.send(embed=embed("❌ Error", f"Something went wrong: {str(e)}", color=0xED4245))
 
 @bot.hybrid_command(name="housepoints", description="Add or remove points from a member")
 @commands.has_permissions(administrator=True)
-@app_commands.describe(action="Add or remove points", member="The member", amount="Number of points")
-async def housepoints(ctx, action: Literal['add', 'remove'], member: discord.Member, amount: int):
+@app_commands.describe(action="Add or remove points", member="The member", amount="Number of points", reason="Reason for the change (optional)")
+async def housepoints(ctx, action: Literal['add', 'remove'], member: discord.Member, amount: int, *, reason: Optional[str] = None):
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -499,15 +531,35 @@ async def housepoints(ctx, action: Literal['add', 'remove'], member: discord.Mem
         result = cur.fetchone()
         if not result:
             return await ctx.send(embed=embed("❌ No House", f"{member.mention} isn't in a house yet.", color=0xED4245))
+
         house_name = result['house_id']
-        modifier = amount if action == 'add' else -amount
+        modifier   = amount if action == 'add' else -amount
         cur.execute('UPDATE users SET contributions_points = contributions_points + %s WHERE user_id=%s', (modifier, str(member.id)))
         cur.execute('UPDATE houses SET house_points = house_points + %s WHERE name=%s', (modifier, house_name))
-        if action == 'add':
-            await ctx.send(embed=build_embed("📈 Points Added", f"{member.mention} earned **+{amount}** points for **{house_name.capitalize()}**.", house=house_name, color=0x57F287))
-        else:
-            await ctx.send(embed=build_embed("📉 Points Removed", f"{member.mention} lost **{amount}** points from **{house_name.capitalize()}**.", house=house_name, color=0xED4245))
-        await log_action(ctx, "💰 Points Changed", f"{ctx.author.mention} {'added' if action == 'add' else 'removed'} {amount}pts {'to' if action == 'add' else 'from'} {member.mention} ({house_name.capitalize()}).")
+
+        # Write log
+        target_av = str(member.display_avatar.url) if member.display_avatar else None
+        write_log(cur, str(member.id), member.display_name,
+                  member.avatar.key if member.avatar else None,
+                  amount, reason or '', action, house_name,
+                  str(ctx.author.id), ctx.author.display_name,
+                  ctx.author.avatar.key if ctx.author.avatar else None)
+
+        # Build response embed
+        desc = f"{member.mention} earned **+{amount}** points for **{house_name.capitalize()}**." if action == 'add' else \
+               f"{member.mention} lost **{amount}** points from **{house_name.capitalize()}**."
+        if reason:
+            desc += f"\n**Reason:** {reason}"
+
+        color = 0x57F287 if action == 'add' else 0xED4245
+        await ctx.send(embed=build_embed(
+            f"{'📈 Points Added' if action == 'add' else '📉 Points Removed'}",
+            desc, house=house_name, color=color
+        ))
+
+        # Post to log channel
+        await post_log_to_channel(house_name, member.display_name, amount, reason or '', action, ctx.author.display_name)
+
     finally:
         return_db(conn)
 
@@ -549,39 +601,31 @@ async def leaderboard(ctx, house_name: Optional[str] = None):
     conn = get_db()
     try:
         cur = conn.cursor()
-        
         if house_name:
             house_name = house_name.lower()
             cur.execute('SELECT user_id, contributions_points, house_id FROM users WHERE house_id=%s ORDER BY contributions_points DESC LIMIT 10', (house_name,))
             res = cur.fetchall()
             if not res:
-                return await ctx.send(embed=embed("❌ No Members", f"**{house_name.capitalize()}** has no members yet.", color=0xED4245))
-            
+                return await ctx.send(embed=embed("❌ No Members", f"**{house_name.capitalize()}** has no members.", color=0xED4245))
             medals = ["🥇", "🥈", "🥉"]
-            lines = []
+            lines  = []
             for i, r in enumerate(res):
-                member = ctx.guild.get_member(int(r['user_id']))
-                name = member.display_name if member else f"User {r['user_id']}"
-                rank = medals[i] if i < 3 else f"**{i+1}.**"
-                lines.append(f"{rank} {name} — **{r['contributions_points']:,}** pts")
-            
-            e = build_embed(f"🏆 {house_name.capitalize()} Leaderboard", "\n".join(lines), house=house_name, color=0xFEE75C)
-            await ctx.send(embed=e)
+                m = ctx.guild.get_member(int(r['user_id']))
+                name = m.display_name if m else f"User {r['user_id']}"
+                lines.append(f"{medals[i] if i < 3 else f'**{i+1}.**'} {name} — **{r['contributions_points']:,}** pts")
+            await ctx.send(embed=build_embed(f"🏆 {house_name.capitalize()} Leaderboard", "\n".join(lines), house=house_name, color=0xFEE75C))
         else:
             cur.execute('SELECT user_id, contributions_points, house_id FROM users ORDER BY contributions_points DESC LIMIT 15')
             res = cur.fetchall()
             if not res:
                 return await ctx.send(embed=embed("🏆 Member Leaderboard", "No members yet.", color=0xFEE75C))
-            
             medals = ["🥇", "🥈", "🥉"]
-            lines = []
+            lines  = []
             for i, r in enumerate(res):
-                member = ctx.guild.get_member(int(r['user_id']))
-                name = member.display_name if member else f"User {r['user_id']}"
-                rank = medals[i] if i < 3 else f"**{i+1}.**"
+                m = ctx.guild.get_member(int(r['user_id']))
+                name     = m.display_name if m else f"User {r['user_id']}"
                 house_tag = f"({r['house_id'].capitalize()})" if r['house_id'] else ""
-                lines.append(f"{rank} {name} {house_tag} — **{r['contributions_points']:,}** pts")
-            
+                lines.append(f"{medals[i] if i < 3 else f'**{i+1}.**'} {name} {house_tag} — **{r['contributions_points']:,}** pts")
             await ctx.send(embed=embed("🏆 Member Leaderboard", "\n".join(lines), color=0xFEE75C))
     finally:
         return_db(conn)
@@ -597,7 +641,7 @@ async def mvp(ctx, house_name: str):
         res = cur.fetchone()
         if not res:
             return await ctx.send(embed=embed("❌ No Results", f"**{house_name.capitalize()}** doesn't exist or has no members.", color=0xED4245))
-        member = ctx.guild.get_member(int(res['user_id']))
+        member  = ctx.guild.get_member(int(res['user_id']))
         mention = member.mention if member else f"User {res['user_id']}"
         e = build_embed(f"⭐ {house_name.capitalize()} MVP", f"{mention} is carrying with **{res['contributions_points']:,}** points.", house=house_name, color=0xFEE75C)
         if member:
