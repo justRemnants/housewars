@@ -1,680 +1,193 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ice Dodo{% block title %}{% endblock %}</title>
-    <link rel="icon" type="image/png" href="/static/favicon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg: #0d0f13; --surface: #161920; --surface2: #1e2229; --surface3: #252931;
-            --border: #2a2e38; --accent: #5865f2; --accent-hover: #4752c4;
-            --green: #57f287; --red: #ed4245; --yellow: #fee75c; --orange: #ff8c00;
-            --text: #e3e5e8; --muted: #72767d; --radius: 12px;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; }
+{% extends "base.html" %}
+{% block title %} — Members{% endblock %}
+{% block page_title %}Members{% endblock %}
+{% block page_sub %}View, assign, and adjust member points{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openAssign()">+ Assign Member</button>
+{% endblock %}
 
-        * { scrollbar-width: thin; scrollbar-color: #4a4d57 transparent; }
-        *::-webkit-scrollbar { width: 8px; height: 8px; }
-        *::-webkit-scrollbar-track { background: transparent; }
-        *::-webkit-scrollbar-thumb { background: #4a4d57; border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
-        *::-webkit-scrollbar-thumb:hover { background: #5a5d67; background-clip: padding-box; }
-        .modal { scrollbar-width: thin; scrollbar-color: #5a5d67 transparent; }
-        .modal::-webkit-scrollbar { width: 6px; }
-        .modal::-webkit-scrollbar-thumb { background: #5a5d67; border-radius: 3px; }
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div><h3>All Members</h3><p>{{ users|length }} players assigned</p></div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Rank</th><th>Member</th><th>House</th><th>Roles</th><th>Points</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for u in users %}
+            <tr>
+                <td>
+                    {% if loop.index == 1 %}<span class="rank gold">#1</span>
+                    {% elif loop.index == 2 %}<span class="rank silver">#2</span>
+                    {% elif loop.index == 3 %}<span class="rank bronze">#3</span>
+                    {% else %}<span class="rank default">#{{ loop.index }}</span>{% endif %}
+                </td>
+                <td>
+                    <div class="flex items-center gap-8">
+                        {% if u.avatar %}
+                        <img class="member-avatar" src="https://cdn.discordapp.com/avatars/{{ u.user_id }}/{{ u.avatar }}.png?size=64" alt="" onerror="this.src='/static/favicon.png'">
+                        {% else %}
+                        <div class="member-avatar" style="background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff">
+                            {{ (u.display_name or u.username or u.user_id)[0]|upper }}
+                        </div>
+                        {% endif %}
+                        <div>
+                            <div class="member-name">{{ u.display_name or u.username or 'Unknown' }}</div>
+                            <div class="member-tag">@{{ u.username or u.user_id }}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span class="badge badge-purple">{{ u.house|capitalize }}</span></td>
+                <td>
+                    {% if u.discord_roles %}
+                        {% for role in u.discord_roles[:3] %}
+                        <span class="role-badge" style="background:{{ 'rgba(' + role.color_rgb + ',0.15)' if role.color_rgb else 'var(--surface2)' }};color:{{ '#' + role.color_hex if role.color_hex else 'var(--text)' }};border-color:{{ 'rgba(' + role.color_rgb + ',0.3)' if role.color_rgb else 'var(--border)' }}">
+                            <span class="role-dot" style="background:{{ '#' + role.color_hex if role.color_hex else '#72767d' }}"></span>
+                            {{ role.name }}
+                        </span>
+                        {% endfor %}
+                        {% if u.discord_roles|length > 3 %}
+                        <span class="badge" style="background:var(--surface2);color:var(--muted)">+{{ u.discord_roles|length - 3 }}</span>
+                        {% endif %}
+                    {% else %}
+                    <span style="color:var(--muted);font-size:12px">—</span>
+                    {% endif %}
+                </td>
+                <td><strong id="mpts-{{ u.user_id }}">{{ u.points|int }}</strong></td>
+                <td>
+                    <div class="flex gap-8">
+                        <button class="btn btn-success btn-sm" onclick="openMPts('{{ u.user_id }}','add')">+ Add</button>
+                        <button class="btn btn-danger btn-sm" onclick="openMPts('{{ u.user_id }}','remove')">− Remove</button>
+                        <button class="btn btn-ghost btn-sm" onclick="openMoveModal('{{ u.user_id }}', '{{ u.house }}')">🔀 Move</button>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:32px">No members yet. Use <code>!assign</code> or the button above.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 
-        .sidebar {
-            width: 240px; min-height: 100vh; background: var(--surface);
-            border-right: 1px solid var(--border); display: flex; flex-direction: column;
-            position: fixed; left: 0; top: 0; bottom: 0; z-index: 10;
-        }
-        .sidebar-logo { padding: 22px 20px 18px; display: flex; align-items: center; gap: 10px; }
-        .sidebar-logo img { width: 32px; height: 32px; border-radius: 8px; }
-        .sidebar-logo h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
-        .sidebar-logo span { font-size: 11px; color: var(--muted); display: block; margin-top: 1px; }
-        .sidebar-divider { height: 1px; background: var(--border); margin: 0 16px 14px 16px; }
-        .sidebar-nav { flex: 1; padding: 0 10px 14px; display: flex; flex-direction: column; gap: 2px; }
-        .nav-link {
-            display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-            border-radius: 8px; color: var(--muted); text-decoration: none;
-            font-size: 14px; font-weight: 500; transition: all 0.15s; position: relative;
-        }
-        .nav-link:hover { background: var(--surface2); color: var(--text); }
-        .nav-link.active { background: var(--accent); color: #fff; }
-        .nav-link svg { width: 17px; height: 17px; flex-shrink: 0; }
-        .sidebar-bottom { padding: 14px 10px; border-top: 1px solid var(--border); }
-
-        /* Discord user widget in sidebar */
-        .sidebar-user {
-            display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-            background: var(--surface2); border-radius: 10px; margin-bottom: 8px;
-        }
-        .sidebar-user-avatar {
-            width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
-            background: var(--accent); flex-shrink: 0;
-        }
-        .sidebar-user-avatar-placeholder {
-            width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0;
-        }
-        .sidebar-user-info { min-width: 0; }
-        .sidebar-user-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .sidebar-user-tag { font-size: 11px; color: var(--muted); }
-
-        .logout-btn {
-            display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-            border-radius: 8px; color: var(--muted); text-decoration: none;
-            font-size: 14px; font-weight: 500; transition: all 0.15s; width: 100%;
-            background: none; border: none; cursor: pointer; font-family: inherit;
-        }
-        .logout-btn:hover { background: var(--surface2); color: var(--red); }
-
-        .main { margin-left: 240px; flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
-        .topbar {
-            padding: 18px 32px; border-bottom: 1px solid var(--border);
-            background: var(--surface); display: flex; align-items: center; justify-content: space-between;
-            animation: fadeDown 0.3s ease;
-        }
-        .topbar h2 { font-size: 19px; font-weight: 700; }
-        .topbar p { font-size: 13px; color: var(--muted); margin-top: 2px; }
-        .content { padding: 28px 32px; flex: 1; animation: fadeUp 0.35s ease; }
-
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
-        .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
-        .card-header h3 { font-size: 15px; font-weight: 600; }
-        .card-header p { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-bottom: 22px; }
-        .stat-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-            padding: 18px; animation: fadeUp 0.4s ease; transition: border-color 0.2s, transform 0.2s;
-        }
-        .stat-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-        .stat-card .label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-        .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
-        .stat-card .sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
-
-        table { width: 100%; border-collapse: collapse; }
-        .table-wrap { overflow-x: auto; }
-        th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); padding: 0 14px 10px; }
-        td { padding: 11px 14px; font-size: 14px; border-top: 1px solid var(--border); transition: background 0.1s; }
-        tr { animation: fadeIn 0.3s ease; }
-        tr:hover td { background: var(--surface2); }
-
-        .btn {
-            display: inline-flex; align-items: center; gap: 6px; padding: 8px 15px;
-            border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
-            border: none; transition: all 0.15s; text-decoration: none; font-family: inherit;
-        }
-        .btn-primary { background: var(--accent); color: #fff; }
-        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
-        .btn-success { background: rgba(87,242,135,0.12); color: var(--green); border: 1px solid rgba(87,242,135,0.25); }
-        .btn-success:hover { background: rgba(87,242,135,0.2); }
-        .btn-danger { background: rgba(237,66,69,0.12); color: var(--red); border: 1px solid rgba(237,66,69,0.25); }
-        .btn-danger:hover { background: rgba(237,66,69,0.2); }
-        .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-        .btn-ghost:hover { background: var(--surface3); }
-        .btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 6px; }
-        .btn-warning { background: rgba(254,231,92,0.12); color: var(--yellow); border: 1px solid rgba(254,231,92,0.25); }
-        .btn-warning:hover { background: rgba(254,231,92,0.2); }
-        .btn-discord { background: #5865f2; color: #fff; }
-        .btn-discord:hover { background: #4752c4; transform: translateY(-1px); }
-
-        .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-        .badge-purple { background: rgba(88,101,242,0.18); color: var(--accent); }
-        .badge-green { background: rgba(87,242,135,0.12); color: var(--green); }
-        .badge-gold { background: rgba(254,231,92,0.12); color: var(--yellow); }
-        .badge-red { background: rgba(237,66,69,0.12); color: var(--red); }
-
-        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; align-items: center; justify-content: center; overflow-y: auto; }
-        .modal-overlay.open { display: flex; }
-        .modal {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-            padding: 26px; width: 100%; max-width: 480px; animation: modalPop 0.18s ease;
-            margin: 40px auto; max-height: calc(100vh - 80px); overflow-y: auto;
-        }
-        .modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
-        .modal > p { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
-        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
-
-        .form-group { margin-bottom: 14px; }
-        label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
-        input, select, textarea {
-            width: 100%; padding: 9px 13px; background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit;
-            outline: none; transition: border-color 0.15s; resize: vertical;
-        }
-        input:focus, select:focus, textarea:focus { border-color: var(--accent); }
-
-        /* ── CUSTOM COLOUR PICKER ── */
-        .color-picker-wrap { position: relative; display: inline-flex; align-items: center; gap: 8px; width: 100%; }
-        .color-swatch-btn {
-            width: 40px; height: 40px; border-radius: 8px; border: 2px solid var(--border);
-            cursor: pointer; flex-shrink: 0; transition: border-color 0.2s, transform 0.15s;
-            position: relative; overflow: hidden;
-        }
-        .color-swatch-btn:hover { border-color: var(--accent); transform: scale(1.05); }
-        .color-swatch-btn::after {
-            content: ''; position: absolute; inset: 0;
-            background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%);
-            pointer-events: none;
-        }
-        .color-picker-panel {
-            position: absolute; top: calc(100% + 8px); left: 0; z-index: 500;
-            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-            padding: 16px; width: 260px; box-shadow: 0 16px 48px rgba(0,0,0,0.5);
-            animation: fadeUp 0.15s ease; display: none;
-        }
-        .color-picker-panel.open { display: block; }
-        .color-picker-gradient {
-            width: 100%; height: 140px; border-radius: 8px; position: relative; cursor: crosshair;
-            margin-bottom: 10px; overflow: hidden;
-        }
-        .color-picker-gradient canvas { width: 100%; height: 100%; display: block; border-radius: 8px; }
-        .color-picker-cursor {
-            position: absolute; width: 12px; height: 12px; border-radius: 50%;
-            border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
-            pointer-events: none; transform: translate(-50%,-50%);
-        }
-        .color-picker-hue {
-            width: 100%; height: 14px; border-radius: 7px; position: relative; cursor: pointer;
-            background: linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);
-            margin-bottom: 10px;
-        }
-        .color-picker-hue-thumb {
-            position: absolute; top: 50%; transform: translate(-50%,-50%);
-            width: 18px; height: 18px; border-radius: 50%;
-            border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
-            pointer-events: none; background: #f00;
-        }
-        .color-picker-hex-row { display: flex; gap: 8px; align-items: center; }
-        .color-picker-hex-row input { font-family: monospace; font-size: 13px; flex: 1; text-transform: uppercase; }
-        .color-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-        .color-preset { width: 22px; height: 22px; border-radius: 5px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s, transform 0.1s; }
-        .color-preset:hover { border-color: rgba(255,255,255,0.4); transform: scale(1.15); }
-
-        input[type="color"] { display: none; } /* hide native, use custom */
-
-        .input-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-        /* ── SEARCHABLE DROPDOWN ── */
-        .search-select { position: relative; }
-        .search-select-input {
-            width: 100%; padding: 9px 13px; background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit;
-            outline: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
-            min-height: 40px;
-        }
-        .search-select-input:focus, .search-select-input.open { border-color: var(--accent); }
-        .search-select-dropdown {
-            position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 400;
-            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-            box-shadow: 0 12px 36px rgba(0,0,0,0.45); display: none; overflow: hidden;
-        }
-        .search-select-dropdown.open { display: block; }
-        .search-select-search {
-            padding: 10px 12px; border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; gap: 8px;
-        }
-        .search-select-search input {
-            background: none; border: none; padding: 0; font-size: 13px; flex: 1;
-            color: var(--text); outline: none;
-        }
-        .search-select-list { max-height: 220px; overflow-y: auto; padding: 4px; }
-        .search-select-category {
-            font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-            color: var(--muted); padding: 8px 10px 4px;
-        }
-        .search-select-option {
-            display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-            border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 500;
-            transition: background 0.1s;
-        }
-        .search-select-option:hover, .search-select-option.highlighted { background: var(--surface2); }
-        .search-select-option.selected { background: rgba(88,101,242,0.15); color: var(--accent); }
-        .search-select-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-        .search-select-role-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-        .search-select-channel-icon { font-size: 14px; flex-shrink: 0; width: 20px; text-align: center; }
-        .search-select-placeholder { color: var(--muted); }
-        .search-select-value { display: flex; align-items: center; gap: 8px; }
-        .search-select-chevron { color: var(--muted); transition: transform 0.15s; margin-left: auto; flex-shrink: 0; }
-        .search-select-input.open .search-select-chevron { transform: rotate(180deg); }
-        .search-select-empty { padding: 20px; text-align: center; color: var(--muted); font-size: 13px; }
-
-        .toggle { display: flex; align-items: center; gap: 10px; }
-        .toggle-switch { width: 40px; height: 22px; background: var(--border); border-radius: 11px; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
-        .toggle-switch.on { background: var(--accent); }
-        .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s; }
-        .toggle-switch.on::after { transform: translateX(18px); }
-
-        .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
-        .toast { padding: 11px 16px; border-radius: 10px; font-size: 13px; font-weight: 500; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; }
-        .toast-success { background: rgba(87,242,135,0.12); border: 1px solid rgba(87,242,135,0.25); color: var(--green); }
-        .toast-error { background: rgba(237,66,69,0.12); border: 1px solid rgba(237,66,69,0.25); color: var(--red); }
-        .toast-info { background: rgba(88,101,242,0.12); border: 1px solid rgba(88,101,242,0.25); color: var(--accent); }
-
-        .podium { display: flex; align-items: flex-end; gap: 12px; justify-content: center; padding: 20px 0 8px; }
-        .podium-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-        .podium-bar { width: 80px; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: center; font-size: 22px; }
-        .podium-bar.first { height: 100px; background: linear-gradient(180deg, #fee75c22, #fee75c11); border: 1px solid #fee75c33; }
-        .podium-bar.second { height: 70px; background: linear-gradient(180deg, #c0c0c022, #c0c0c011); border: 1px solid #c0c0c033; }
-        .podium-bar.third { height: 50px; background: linear-gradient(180deg, #cd7f3222, #cd7f3211); border: 1px solid #cd7f3233; }
-        .podium-name { font-size: 13px; font-weight: 600; text-align: center; }
-        .podium-pts { font-size: 12px; color: var(--muted); }
-
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
-        .mt-18 { margin-top: 18px; } .mt-24 { margin-top: 24px; }
-        .flex { display: flex; } .gap-8 { gap: 8px; } .gap-10 { gap: 10px; } .gap-12 { gap: 12px; }
-        .items-center { align-items: center; } .justify-between { justify-content: space-between; }
-        .rank { font-size: 11px; font-weight: 700; }
-        .rank.gold { color: var(--yellow); } .rank.silver { color: #c0c0c0; } .rank.bronze { color: #cd7f32; } .rank.default { color: var(--muted); }
-        .color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-        .section-divider { height: 1px; background: var(--border); margin: 18px 0; }
-        code { background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
-
-        /* Member card styles */
-        .member-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface3); flex-shrink: 0; }
-        .member-name { font-size: 14px; font-weight: 600; }
-        .member-tag { font-size: 11px; color: var(--muted); }
-        .role-badge {
-            display: inline-flex; align-items: center; gap: 5px;
-            padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
-            border: 1px solid transparent;
-        }
-        .role-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes modalPop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        @keyframes toastIn { from { transform: translateX(16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .skeleton { background: var(--surface2); border-radius: 6px; animation: pulse 1.5s infinite; }
-    </style>
-    {% block head %}{% endblock %}
-</head>
-<body>
-    <aside class="sidebar">
-        <div class="sidebar-logo">
-            <img src="/static/favicon.png" alt="Icon">
-            <div><h1>Ice Dodo</h1><span>Dashboard</span></div>
+<!-- Assign Modal -->
+<div id="assignModal" class="modal-overlay">
+    <div class="modal">
+        <h3>👤 Assign Member</h3>
+        <p>Assign a Discord user to a house. Role changes apply within seconds.</p>
+        <div class="form-group">
+            <label>Member</label>
+            <div id="assignMemberSelect"></div>
+            <p class="input-hint">Type to search by name or username</p>
         </div>
-        <div class="sidebar-divider"></div>
-        <nav class="sidebar-nav">
-            <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                Overview
-            </a>
-            <a href="/houses" class="nav-link {% if request.path == '/houses' %}active{% endif %}">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
-                Houses
-            </a>
-            <a href="/members" class="nav-link {% if request.path == '/members' %}active{% endif %}">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                Members
-            </a>
-            <a href="/logs" class="nav-link {% if request.path == '/logs' %}active{% endif %}">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
-                Logs
-            </a>
-            <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-                Settings
-            </a>
-        </nav>
-        <div class="sidebar-bottom">
-            {% if session.discord_user %}
-            <div class="sidebar-user">
-                {% if session.discord_user.avatar %}
-                <img class="sidebar-user-avatar" src="https://cdn.discordapp.com/avatars/{{ session.discord_user.id }}/{{ session.discord_user.avatar }}.png?size=64" alt="Avatar">
-                {% else %}
-                <div class="sidebar-user-avatar-placeholder">{{ session.discord_user.username[0]|upper }}</div>
-                {% endif %}
-                <div class="sidebar-user-info">
-                    <div class="sidebar-user-name">{{ session.discord_user.username }}</div>
-                    <div class="sidebar-user-tag">Discord</div>
-                </div>
-            </div>
-            {% endif %}
-            <a href="/logout" class="logout-btn">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="17" height="17"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-                Logout
-            </a>
+        <div class="form-group">
+            <label>House</label>
+            <select id="a_house">
+                <option value="">Select a house…</option>
+                {% for h in houses %}<option value="{{ h.name }}">{{ h.name|capitalize }}</option>{% endfor %}
+            </select>
         </div>
-    </aside>
-
-    <main class="main">
-        <div class="topbar">
-            <div>
-                <h2>{% block page_title %}Dashboard{% endblock %}</h2>
-                <p>{% block page_sub %}{% endblock %}</p>
-            </div>
-            <div class="flex gap-8 items-center">{% block topbar_actions %}{% endblock %}</div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('assignModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="doAssign()">Assign</button>
         </div>
-        <div class="content">{% block content %}{% endblock %}</div>
-    </main>
+    </div>
+</div>
 
-    <div class="toast-container" id="toastContainer"></div>
-    <script>
-    /* ── Toast ── */
-    function toast(msg, type='success') {
-        const c = document.getElementById('toastContainer');
-        const t = document.createElement('div');
-        t.className = `toast toast-${type}`;
-        t.innerHTML = `<span>${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span> ${msg}`;
-        c.appendChild(t);
-        setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(16px)'; t.style.transition='all 0.2s'; setTimeout(()=>t.remove(),200); }, 3200);
+<!-- Move Modal -->
+<div id="moveModal" class="modal-overlay">
+    <div class="modal">
+        <h3>🔀 Move Member</h3>
+        <p id="moveDesc">Move this member to a different house.</p>
+        <div class="form-group">
+            <label>New House</label>
+            <select id="m_house">
+                {% for h in houses %}<option value="{{ h.name }}">{{ h.name|capitalize }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('moveModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="doMove()">Move</button>
+        </div>
+    </div>
+</div>
+
+<!-- Points Modal -->
+<div id="mptsModal" class="modal-overlay">
+    <div class="modal">
+        <h3 id="mptsTitle">Adjust Points</h3>
+        <p>Adjusts this member's points and their house total.</p>
+        <div class="form-group"><label>Amount</label><input type="number" id="mptsAmount" min="1" placeholder="e.g. 10"></div>
+        <div class="form-group"><label>Reason <span style="font-size:10px;color:var(--muted);text-transform:none">(optional)</span></label><input type="text" id="mptsReason" placeholder="e.g. Won the trivia event"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('mptsModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitMPts()">Confirm</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let curUser = null, curUserAction = null;
+let assignMemberSel = null;
+
+async function openAssign() {
+    openModal('assignModal');
+    if(!assignMemberSel) {
+        const gd = await getGuildData();
+        const opts = memberOptions(gd.members || []);
+        assignMemberSel = createSearchSelect('assignMemberSelect', opts, null, 'Search member…');
     }
-    function openModal(id) { document.getElementById(id).classList.add('open'); }
-    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-    document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('.modal-overlay').forEach(m => {
-            m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
-        });
+}
+
+async function doAssign() {
+    const house = document.getElementById('a_house').value;
+    const uid = assignMemberSel?.getValue();
+    if (!uid || !house) return toast('Fill in all fields.', 'error');
+    const r = await fetch('/api/members/assign', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({user_id: uid, house_name: house})
     });
+    if (r.ok) { toast('Assigned! Role changes apply within seconds.'); closeModal('assignModal'); setTimeout(()=>location.reload(),1000); }
+    else { const d = await r.json(); toast(d.error || 'Failed.', 'error'); }
+}
 
-    /* ── Custom Colour Picker ── */
-    const PRESETS = ['#5865f2','#57f287','#ed4245','#fee75c','#eb459e','#ff8c00','#00b0f4','#1abc9c','#e67e22','#9b59b6','#ffffff','#72767d'];
+function openMoveModal(uid, currentHouse) {
+    curUser = uid;
+    document.getElementById('moveDesc').textContent = `Move user ${uid} from ${currentHouse} to:`;
+    openModal('moveModal');
+}
+async function doMove() {
+    const house = document.getElementById('m_house').value;
+    if (!house) return toast('Select a house.', 'error');
+    const r = await fetch('/api/members/assign', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({user_id: curUser, house_name: house})
+    });
+    if (r.ok) { toast('Moved! Role changes apply within seconds.'); closeModal('moveModal'); setTimeout(()=>location.reload(),1000); }
+    else toast('Failed.', 'error');
+}
 
-    function createColorPicker(swatchId, hexInputId, onChangeCb) {
-        const swatch = document.getElementById(swatchId);
-        const hexInput = document.getElementById(hexInputId);
-        if (!swatch || !hexInput) return;
-
-        // Create panel
-        const panel = document.createElement('div');
-        panel.className = 'color-picker-panel';
-        panel.innerHTML = `
-            <div class="color-picker-gradient"><canvas width="228" height="140"></canvas><div class="color-picker-cursor" style="left:100%;top:0%"></div></div>
-            <div class="color-picker-hue"><div class="color-picker-hue-thumb"></div></div>
-            <div class="color-picker-hex-row">
-                <input type="text" class="cp-hex-field" placeholder="#5865F2" maxlength="7">
-            </div>
-            <div class="color-presets">${PRESETS.map(c=>`<div class="color-preset" style="background:${c}" data-color="${c}"></div>`).join('')}</div>
-        `;
-        swatch.parentElement.style.position = 'relative';
-        swatch.parentElement.appendChild(panel);
-
-        const canvas = panel.querySelector('canvas');
-        const ctx = canvas.getContext('2d');
-        const cursor = panel.querySelector('.color-picker-cursor');
-        const hueTrack = panel.querySelector('.color-picker-hue');
-        const hueThumb = panel.querySelector('.color-picker-hue-thumb');
-        const cpHex = panel.querySelector('.cp-hex-field');
-
-        let hue = 220, sat = 0.6, val = 0.95;
-        let dragging = null;
-
-        function hsvToHex(h,s,v) {
-            let r,g,b;
-            const i=Math.floor(h/60)%6, f=h/60-Math.floor(h/60), p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
-            switch(i){case 0:r=v;g=t;b=p;break;case 1:r=q;g=v;b=p;break;case 2:r=p;g=v;b=t;break;case 3:r=p;g=q;b=v;break;case 4:r=t;g=p;b=v;break;default:r=v;g=p;b=q;}
-            return '#'+[r,g,b].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('').toUpperCase();
-        }
-
-        function hexToHsv(hex) {
-            hex = hex.replace('#','');
-            if(hex.length!==6) return null;
-            const r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
-            const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
-            let h=0, s=max===0?0:d/max, v=max;
-            if(d!==0){switch(max){case r:h=((g-b)/d)%6;break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;}h=Math.round(h*60);if(h<0)h+=360;}
-            return {h,s,v};
-        }
-
-        function drawGradient() {
-            const w=canvas.width, h=canvas.height;
-            const hueColor=`hsl(${hue},100%,50%)`;
-            const white=ctx.createLinearGradient(0,0,w,0);
-            white.addColorStop(0,'#fff'); white.addColorStop(1,hueColor);
-            ctx.fillStyle=white; ctx.fillRect(0,0,w,h);
-            const black=ctx.createLinearGradient(0,0,0,h);
-            black.addColorStop(0,'transparent'); black.addColorStop(1,'#000');
-            ctx.fillStyle=black; ctx.fillRect(0,0,w,h);
-        }
-
-        function updateAll(hex) {
-            swatch.style.background = hex;
-            hexInput.value = hex;
-            cpHex.value = hex;
-            if(onChangeCb) onChangeCb(hex);
-        }
-
-        function updateFromHSV() {
-            const hex = hsvToHex(hue, sat, val);
-            cursor.style.left = (sat*100)+'%';
-            cursor.style.top = ((1-val)*100)+'%';
-            cursor.style.background = hex;
-            hueThumb.style.left = (hue/360*100)+'%';
-            hueThumb.style.background = `hsl(${hue},100%,50%)`;
-            drawGradient();
-            updateAll(hex);
-        }
-
-        function setFromHex(hex) {
-            const hsv = hexToHsv(hex);
-            if(!hsv) return;
-            hue=hsv.h; sat=hsv.s; val=hsv.v;
-            updateFromHSV();
-        }
-
-        // Gradient drag
-        canvas.addEventListener('mousedown', e => { dragging='grad'; handleGrad(e); });
-        document.addEventListener('mousemove', e => { if(dragging==='grad') handleGrad(e); if(dragging==='hue') handleHue(e); });
-        document.addEventListener('mouseup', () => dragging=null);
-
-        function handleGrad(e) {
-            const rect = canvas.getBoundingClientRect();
-            sat = Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-            val = Math.max(0,Math.min(1,1-(e.clientY-rect.top)/rect.height));
-            updateFromHSV();
-        }
-        function handleHue(e) {
-            const rect = hueTrack.getBoundingClientRect();
-            hue = Math.max(0,Math.min(360,(e.clientX-rect.left)/rect.width*360));
-            updateFromHSV();
-        }
-        hueTrack.addEventListener('mousedown', e => { dragging='hue'; handleHue(e); });
-
-        // Touch support
-        canvas.addEventListener('touchstart', e => { dragging='grad'; handleGradTouch(e); }, {passive:true});
-        hueTrack.addEventListener('touchstart', e => { dragging='hue'; handleHueTouch(e); }, {passive:true});
-        document.addEventListener('touchmove', e => {
-            if(dragging==='grad') handleGradTouch(e);
-            if(dragging==='hue') handleHueTouch(e);
-        }, {passive:true});
-        document.addEventListener('touchend', () => dragging=null);
-        function handleGradTouch(e) { if(e.touches[0]) handleGrad(e.touches[0]); }
-        function handleHueTouch(e) { if(e.touches[0]) handleHue(e.touches[0]); }
-
-        cpHex.addEventListener('input', () => {
-            const v = cpHex.value.startsWith('#') ? cpHex.value : '#'+cpHex.value;
-            if(/^#[0-9a-fA-F]{6}$/.test(v)) setFromHex(v);
-        });
-        hexInput.addEventListener('input', () => {
-            const v = hexInput.value.startsWith('#') ? hexInput.value : '#'+hexInput.value;
-            if(/^#[0-9a-fA-F]{6}$/.test(v)) setFromHex(v);
-        });
-
-        panel.querySelectorAll('.color-preset').forEach(p => {
-            p.addEventListener('click', () => setFromHex(p.dataset.color));
-        });
-
-        // Open/close
-        swatch.addEventListener('click', e => {
-            e.stopPropagation();
-            // Close all other panels
-            document.querySelectorAll('.color-picker-panel.open').forEach(p => { if(p!==panel) p.classList.remove('open'); });
-            panel.classList.toggle('open');
-            if(panel.classList.contains('open')) {
-                setFromHex(hexInput.value || '#5865F2');
-            }
-        });
-        document.addEventListener('click', e => {
-            if(!panel.contains(e.target) && e.target!==swatch) panel.classList.remove('open');
-        });
-
-        // Init
-        setFromHex(hexInput.value || '#5865F2');
-        return { setHex: setFromHex };
-    }
-
-    /* ── Searchable Select ── */
-    function createSearchSelect(containerId, options, onSelect, placeholder='Select…') {
-        // options: [{value, label, sublabel, avatarUrl, colorDot, icon, category}]
-        const container = document.getElementById(containerId);
-        if(!container) return;
-        container.innerHTML = '';
-        container.className = 'search-select';
-
-        let selected = null;
-        let highlighted = -1;
-
-        const trigger = document.createElement('div');
-        trigger.className = 'search-select-input';
-        trigger.tabIndex = 0;
-
-        const dropdown = document.createElement('div');
-        dropdown.className = 'search-select-dropdown';
-        dropdown.innerHTML = `
-            <div class="search-select-search">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input type="text" placeholder="Search…" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="search-select-list"></div>
-        `;
-        container.appendChild(trigger);
-        container.appendChild(dropdown);
-
-        const searchInput = dropdown.querySelector('input');
-        const list = dropdown.querySelector('.search-select-list');
-
-        function renderOption(opt) {
-            const div = document.createElement('div');
-            div.className = 'search-select-option';
-            if(selected && selected.value === opt.value) div.classList.add('selected');
-            let inner = '';
-            if(opt.avatarUrl) inner += `<img class="search-select-avatar" src="${opt.avatarUrl}" alt="" onerror="this.style.display='none'">`;
-            else if(opt.colorDot !== undefined) inner += `<div class="search-select-role-dot" style="background:${opt.colorDot||'#72767d'}"></div>`;
-            else if(opt.icon) inner += `<span class="search-select-channel-icon">${opt.icon}</span>`;
-            inner += `<div><div style="font-size:13px;font-weight:500">${opt.label}</div>${opt.sublabel?`<div style="font-size:11px;color:var(--muted)">${opt.sublabel}</div>`:''}`;
-            inner += '</div>';
-            div.innerHTML = inner;
-            div.addEventListener('click', () => selectOption(opt));
-            return div;
-        }
-
-        function renderList(filter='') {
-            list.innerHTML = '';
-            const q = filter.toLowerCase();
-            let allOpts = options.filter(o => !q || o.label.toLowerCase().includes(q) || (o.sublabel||'').toLowerCase().includes(q));
-            if(!allOpts.length) { list.innerHTML = `<div class="search-select-empty">No results</div>`; return; }
-
-            // Group by category
-            const cats = {};
-            allOpts.forEach(o => { const c = o.category||''; if(!cats[c]) cats[c]=[]; cats[c].push(o); });
-            Object.entries(cats).forEach(([cat, opts]) => {
-                if(cat) { const ch = document.createElement('div'); ch.className='search-select-category'; ch.textContent=cat; list.appendChild(ch); }
-                opts.forEach(o => list.appendChild(renderOption(o)));
-            });
-        }
-
-        function renderTrigger() {
-            if(!selected) {
-                trigger.innerHTML = `<span class="search-select-placeholder">${placeholder}</span><svg class="search-select-chevron" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>`;
-            } else {
-                let inner = '<div class="search-select-value">';
-                if(selected.avatarUrl) inner += `<img class="search-select-avatar" src="${selected.avatarUrl}" alt="" onerror="this.style.display='none'">`;
-                else if(selected.colorDot !== undefined) inner += `<div class="search-select-role-dot" style="background:${selected.colorDot||'#72767d'}"></div>`;
-                else if(selected.icon) inner += `<span class="search-select-channel-icon">${selected.icon}</span>`;
-                inner += `<span>${selected.label}</span></div>`;
-                inner += `<svg class="search-select-chevron" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>`;
-                trigger.innerHTML = inner;
-            }
-        }
-
-        function selectOption(opt) {
-            selected = opt;
-            renderTrigger();
-            close();
-            if(onSelect) onSelect(opt);
-        }
-
-        function open() {
-            dropdown.classList.add('open');
-            trigger.classList.add('open');
-            searchInput.value = '';
-            renderList('');
-            searchInput.focus();
-        }
-        function close() {
-            dropdown.classList.remove('open');
-            trigger.classList.remove('open');
-        }
-
-        trigger.addEventListener('click', e => { e.stopPropagation(); dropdown.classList.contains('open') ? close() : open(); });
-        searchInput.addEventListener('input', () => renderList(searchInput.value));
-        document.addEventListener('click', e => { if(!container.contains(e.target)) close(); });
-
-        renderTrigger();
-        renderList();
-
-        return {
-            getValue: () => selected?.value || null,
-            getSelected: () => selected,
-            setValue: (val) => {
-                const opt = options.find(o => o.value === val);
-                if(opt) selectOption(opt);
-            },
-            updateOptions: (newOpts) => {
-                options.length = 0; options.push(...newOpts);
-                renderList(searchInput.value);
-                renderTrigger();
-            }
-        };
-    }
-
-    /* ── Guild data cache ── */
-    let _guildData = null;
-    async function getGuildData() {
-        if(_guildData) return _guildData;
-        try {
-            const r = await fetch('/api/guild-data');
-            if(r.ok) { _guildData = await r.json(); return _guildData; }
-        } catch(e) {}
-        return {members:[], channels:[], roles:[]};
-    }
-
-    function memberOptions(members) {
-        return members.map(m => ({
-            value: m.id, label: m.display_name||m.username,
-            sublabel: '@'+m.username,
-            avatarUrl: m.avatar ? `https://cdn.discordapp.com/avatars/${m.id}/${m.avatar}.png?size=32` : null,
-            category: ''
-        }));
-    }
-    function channelOptions(channels) {
-        // channels: [{id, name, type, category}]
-        return channels.map(c => ({
-            value: c.id, label: c.name,
-            icon: c.type === 0 ? '#' : c.type === 2 ? '🔊' : c.type === 15 ? '📋' : '#',
-            category: c.category || 'No Category'
-        }));
-    }
-    function roleOptions(roles) {
-        return roles.filter(r => r.name !== '@everyone').map(r => ({
-            value: r.id, label: r.name,
-            colorDot: r.color ? '#' + r.color.toString(16).padStart(6,'0') : '#72767d',
-            category: ''
-        }));
-    }
-    </script>
-    {% block scripts %}{% endblock %}
-</body>
-</html>
+function openMPts(uid, action) {
+    curUser = uid; curUserAction = action;
+    document.getElementById('mptsTitle').textContent = action==='add' ? '📈 Add Points' : '📉 Remove Points';
+    document.getElementById('mptsAmount').value = '';
+    document.getElementById('mptsReason').value = '';
+    openModal('mptsModal');
+}
+async function submitMPts() {
+    const amount = parseInt(document.getElementById('mptsAmount').value);
+    if (!amount || amount < 1) return toast('Enter a valid amount.', 'error');
+    const reason = document.getElementById('mptsReason').value.trim();
+    const r = await fetch(`/api/members/${curUser}/points`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:curUserAction, amount, reason})
+    });
+    const data = await r.json();
+    if (r.ok) { document.getElementById('mpts-'+curUser).textContent = data.points; toast('Points updated!'); closeModal('mptsModal'); }
+    else toast('Failed.', 'error');
+}
+</script>
+{% endblock %}
