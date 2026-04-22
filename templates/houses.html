@@ -58,13 +58,17 @@
         <h3>🏠 New House</h3>
         <p>Create a house and link it to a Discord role.</p>
         <div class="form-group"><label>House Name</label><input type="text" id="c_name" placeholder="e.g. Phoenix"></div>
-        <div class="form-group"><label>Discord Role ID</label><input type="text" id="c_role" placeholder="e.g. 1234567890123456789"><p class="input-hint">Right-click the role in Discord → Copy Role ID (enable Developer Mode first)</p></div>
+        <div class="form-group">
+            <label>Discord Role</label>
+            <div id="createRoleSelect"></div>
+            <p class="input-hint">Search by role name — or leave blank to set later</p>
+        </div>
         <div class="form-row">
             <div class="form-group">
                 <label>House Colour</label>
-                <div class="flex gap-8 items-center">
-                    <input type="color" id="c_color_picker" value="#5865f2" style="width:48px;flex-shrink:0">
-                    <input type="text" id="c_color_hex" placeholder="#5865f2">
+                <div class="color-picker-wrap">
+                    <div class="color-swatch-btn" id="c_swatch" style="background:#5865F2"></div>
+                    <input type="text" id="c_color_hex" placeholder="#5865F2" style="font-family:monospace">
                 </div>
             </div>
             <div class="form-group"><label>Thumbnail URL</label><input type="text" id="c_thumb" placeholder="https://..."></div>
@@ -84,12 +88,15 @@
         <div class="form-row">
             <div class="form-group">
                 <label>House Colour</label>
-                <div class="flex gap-8 items-center">
-                    <input type="color" id="e_color_picker" style="width:48px;flex-shrink:0">
-                    <input type="text" id="e_color_hex">
+                <div class="color-picker-wrap">
+                    <div class="color-swatch-btn" id="e_swatch" style="background:#5865F2"></div>
+                    <input type="text" id="e_color_hex" style="font-family:monospace">
                 </div>
             </div>
-            <div class="form-group"><label>Role ID</label><input type="text" id="e_role" placeholder="Discord Role ID"></div>
+            <div class="form-group">
+                <label>Role</label>
+                <div id="editRoleSelect"></div>
+            </div>
         </div>
         <div class="form-group"><label>Thumbnail URL (overrides global)</label><input type="text" id="e_thumb" placeholder="https://..."></div>
         <div class="modal-actions">
@@ -105,6 +112,7 @@
         <h3 id="ptsTitle">Adjust Points</h3>
         <p id="ptsDesc">Adjust points for this house and all its members.</p>
         <div class="form-group"><label>Amount</label><input type="number" id="ptsAmount" min="1" placeholder="e.g. 50"></div>
+        <div class="form-group"><label>Reason <span style="font-size:10px;color:var(--muted);text-transform:none">(optional)</span></label><input type="text" id="ptsReason" placeholder="e.g. Won the event"></div>
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('ptsModal')">Cancel</button>
             <button class="btn btn-primary" onclick="submitPts()">Confirm</button>
@@ -128,7 +136,7 @@
 <div id="deleteHouseModal" class="modal-overlay">
     <div class="modal">
         <h3>🗑 Delete House</h3>
-        <p id="deleteHouseDesc">This will permanently delete the house from the database. Members will remain but lose their house assignment.</p>
+        <p id="deleteHouseDesc">This will permanently delete the house. Members will remain but lose their house assignment.</p>
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('deleteHouseModal')">Cancel</button>
             <button class="btn btn-danger" onclick="doDeleteHouse()">Delete</button>
@@ -140,20 +148,30 @@
 {% block scripts %}
 <script>
 let curHouse = null, curAction = null;
+let cPicker = null, ePicker = null;
+let createRoleSel = null, editRoleSel = null;
 
-document.getElementById('c_color_picker').addEventListener('input', e => { document.getElementById('c_color_hex').value = e.target.value; });
-document.getElementById('c_color_hex').addEventListener('input', e => { if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)) document.getElementById('c_color_picker').value = e.target.value; });
-document.getElementById('e_color_picker').addEventListener('input', e => { document.getElementById('e_color_hex').value = e.target.value; });
-document.getElementById('e_color_hex').addEventListener('input', e => { if(/^#[0-9a-fA-F]{6}$/.test(e.target.value)) document.getElementById('e_color_picker').value = e.target.value; });
+document.addEventListener('DOMContentLoaded', async () => {
+    // Init colour pickers
+    cPicker = createColorPicker('c_swatch', 'c_color_hex');
+    ePicker = createColorPicker('e_swatch', 'e_color_hex');
+
+    // Load role options for dropdowns
+    const gd = await getGuildData();
+    const rOpts = roleOptions(gd.roles || []);
+    createRoleSel = createSearchSelect('createRoleSelect', rOpts, null, 'Search role…');
+    editRoleSel   = createSearchSelect('editRoleSelect',  rOpts, null, 'Search role…');
+});
 
 async function createHouse() {
     const name = document.getElementById('c_name').value.trim();
     if (!name) return toast('Enter a house name.', 'error');
-    const color = document.getElementById('c_color_hex').value || document.getElementById('c_color_picker').value;
-    const r = await fetch('/api/houses', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
-        name, role_id: document.getElementById('c_role').value || null,
-        color: color.replace('#',''), thumbnail_url: document.getElementById('c_thumb').value
-    })});
+    const color = document.getElementById('c_color_hex').value;
+    const roleId = createRoleSel?.getValue() || null;
+    const r = await fetch('/api/houses', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({name, role_id: roleId, color: color.replace('#',''), thumbnail_url: document.getElementById('c_thumb').value})
+    });
     if (r.ok) { toast(`House "${name}" created!`); closeModal('createModal'); setTimeout(()=>location.reload(),800); }
     else toast('Failed to create house.', 'error');
 }
@@ -162,17 +180,19 @@ function openEdit(name, color, thumb, roleId) {
     curHouse = name;
     document.getElementById('editTitle').textContent = `Edit ${name.charAt(0).toUpperCase()+name.slice(1)}`;
     const hex = '#' + color.replace('#','');
-    document.getElementById('e_color_picker').value = hex;
     document.getElementById('e_color_hex').value = hex;
+    if(ePicker) ePicker.setHex(hex);
     document.getElementById('e_thumb').value = thumb;
-    document.getElementById('e_role').value = roleId;
+    if(editRoleSel && roleId) editRoleSel.setValue(roleId);
     openModal('editModal');
 }
 async function saveEdit() {
-    const color = document.getElementById('e_color_hex').value || document.getElementById('e_color_picker').value;
-    const r = await fetch(`/api/houses/${curHouse}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
-        color: color.replace('#',''), thumbnail_url: document.getElementById('e_thumb').value, role_id: document.getElementById('e_role').value || null
-    })});
+    const color = document.getElementById('e_color_hex').value;
+    const roleId = editRoleSel?.getValue() || null;
+    const r = await fetch(`/api/houses/${curHouse}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({color: color.replace('#',''), thumbnail_url: document.getElementById('e_thumb').value, role_id: roleId})
+    });
     if (r.ok) {
         const hex = color.startsWith('#') ? color : '#'+color;
         document.getElementById('cdot-'+curHouse).style.background = hex;
@@ -186,12 +206,17 @@ function openPts(house, action) {
     document.getElementById('ptsTitle').textContent = action==='add' ? '📈 Add Points' : '📉 Remove Points';
     document.getElementById('ptsDesc').textContent = `${action==='add'?'Add':'Remove'} points for ${house.charAt(0).toUpperCase()+house.slice(1)} and all its members.`;
     document.getElementById('ptsAmount').value = '';
+    document.getElementById('ptsReason').value = '';
     openModal('ptsModal');
 }
 async function submitPts() {
     const amount = parseInt(document.getElementById('ptsAmount').value);
     if (!amount || amount < 1) return toast('Enter a valid amount.', 'error');
-    const r = await fetch(`/api/houses/${curHouse}/points`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:curAction,amount})});
+    const reason = document.getElementById('ptsReason').value.trim();
+    const r = await fetch(`/api/houses/${curHouse}/points`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:curAction, amount, reason})
+    });
     const data = await r.json();
     if (r.ok) { document.getElementById('hpts-'+curHouse).textContent = data.points; toast('Points updated!'); closeModal('ptsModal'); }
     else toast('Failed.', 'error');
