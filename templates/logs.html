@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %} — Logs{% endblock %}
+{% block page_title %}Point Logs{% endblock %}
+{% block page_sub %}All points changes with reasons and actors{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div><h3>📋 Activity Log</h3><p>Every points change, who made it, and why</p></div>
+        <div class="flex gap-8">
+            <select id="filterHouse" onchange="applyFilter()" style="width:140px;padding:6px 10px;font-size:12px">
+                <option value="">All Houses</option>
+                {% for h in houses %}<option value="{{ h.name }}">{{ h.name|capitalize }}</option>{% endfor %}
+            </select>
+            <select id="filterAction" onchange="applyFilter()" style="width:120px;padding:6px 10px;font-size:12px">
+                <option value="">All Actions</option>
+                <option value="add">Add</option>
+                <option value="remove">Remove</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table id="logsTable">
+            <thead><tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Member</th>
+                <th>House</th>
+                <th>Points</th>
+                <th>Reason</th>
+                <th>By</th>
+            </tr></thead>
+            <tbody>
+            {% for log in logs %}
+            <tr data-house="{{ log.house_id or '' }}" data-action="{{ log.action or '' }}">
+                <td style="color:var(--muted);font-size:12px;white-space:nowrap">
+                    {{ log.created_at.strftime('%d %b %Y, %H:%M') if log.created_at else '—' }}
+                </td>
+                <td>
+                    {% if log.action == 'add' %}
+                    <span class="badge badge-green">📈 Add</span>
+                    {% elif log.action == 'remove' %}
+                    <span class="badge badge-red">📉 Remove</span>
+                    {% else %}
+                    <span class="badge badge-purple">{{ log.action or '—' }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if log.target_username %}
+                    <div class="flex items-center gap-8">
+                        {% if log.target_avatar %}
+                        <img class="member-avatar" style="width:24px;height:24px" src="https://cdn.discordapp.com/avatars/{{ log.user_id }}/{{ log.target_avatar }}.png?size=32" alt="" onerror="this.style.display='none'">
+                        {% endif %}
+                        <div>
+                            <div style="font-size:13px;font-weight:500">{{ log.target_username }}</div>
+                            <div style="font-size:11px;color:var(--muted);font-family:monospace">{{ log.user_id }}</div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <span style="font-family:monospace;font-size:12px;color:var(--muted)">{{ log.user_id }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if log.house_id %}
+                    <span class="badge badge-purple">{{ log.house_id|capitalize }}</span>
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if log.action == 'add' %}
+                    <strong style="color:var(--green)">+{{ log.amount }}</strong>
+                    {% elif log.action == 'remove' %}
+                    <strong style="color:var(--red)">-{{ log.amount }}</strong>
+                    {% else %}
+                    <strong>{{ log.amount }}</strong>
+                    {% endif %}
+                </td>
+                <td style="max-width:220px;font-size:13px;color:var(--muted)">
+                    {{ log.reason or '—' }}
+                </td>
+                <td>
+                    {% if log.actor_username %}
+                    <div class="flex items-center gap-8">
+                        {% if log.actor_avatar %}
+                        <img class="member-avatar" style="width:24px;height:24px" src="https://cdn.discordapp.com/avatars/{{ log.actor_id }}/{{ log.actor_avatar }}.png?size=32" alt="" onerror="this.style.display='none'">
+                        {% endif %}
+                        <span style="font-size:13px">{{ log.actor_username }}</span>
+                    </div>
+                    {% elif log.actor_id %}
+                    <span style="font-family:monospace;font-size:12px;color:var(--muted)">{{ log.actor_id }}</span>
+                    {% else %}
+                    <span style="color:var(--muted)">Dashboard</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px">
+                No logs yet. Points changes will appear here.
+            </td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilter() {
+    const house = document.getElementById('filterHouse').value;
+    const action = document.getElementById('filterAction').value;
+    document.querySelectorAll('#logsTable tbody tr').forEach(row => {
+        const hMatch = !house || row.dataset.house === house;
+        const aMatch = !action || row.dataset.action === action;
+        row.style.display = (hMatch && aMatch) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}
