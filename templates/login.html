@@ -10,75 +10,80 @@
         :root {
             --bg: #0d0f13; --surface: #161920; --surface2: #1e2229;
             --border: #2a2e38; --accent: #5865f2; --text: #e3e5e8;
-            --muted: #72767d; --red: #ed4245;
+            --muted: #72767d; --red: #ed4245; --green: #57f287;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
         }
         .login-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 40px;
-            width: 100%;
-            max-width: 380px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+            padding: 40px; width: 100%; max-width: 400px;
         }
-        .login-icon {
-            font-size: 40px;
-            text-align: center;
-            margin-bottom: 16px;
-        }
+        .login-icon { text-align: center; margin-bottom: 16px; }
+        .login-icon img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; }
         h1 { font-size: 22px; font-weight: 700; text-align: center; }
         .sub { font-size: 13px; color: var(--muted); text-align: center; margin-top: 4px; margin-bottom: 28px; }
         label { display: block; font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
         input {
-            width: 100%; padding: 11px 14px;
-            background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text); font-size: 14px;
-            font-family: inherit; outline: none; transition: border-color 0.15s;
+            width: 100%; padding: 11px 14px; background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit;
+            outline: none; transition: border-color 0.15s;
         }
         input:focus { border-color: var(--accent); }
         .btn {
-            width: 100%; padding: 11px;
-            background: var(--accent); color: #fff;
-            border: none; border-radius: 8px;
-            font-size: 14px; font-weight: 600;
-            font-family: inherit; cursor: pointer;
-            margin-top: 16px; transition: background 0.15s;
+            width: 100%; padding: 11px; border: none; border-radius: 8px;
+            font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
+            margin-top: 12px; transition: all 0.15s; display: flex; align-items: center;
+            justify-content: center; gap: 8px; text-decoration: none; color: #fff;
         }
-        .btn:hover { background: #4752c4; }
+        .btn-pw { background: var(--accent); }
+        .btn-pw:hover { background: #4752c4; }
+        .btn-discord {
+            background: #5865f2;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .btn-discord:hover { background: #4752c4; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(88,101,242,0.3); }
+        .divider {
+            display: flex; align-items: center; gap: 12px; margin: 20px 0;
+            font-size: 12px; color: var(--muted);
+        }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
         .error {
-            background: rgba(237,66,69,0.12);
-            border: 1px solid rgba(237,66,69,0.3);
-            color: var(--red);
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-size: 13px;
-            margin-bottom: 16px;
+            background: rgba(237,66,69,0.12); border: 1px solid rgba(237,66,69,0.3);
+            color: var(--red); padding: 10px 14px; border-radius: 8px;
+            font-size: 13px; margin-bottom: 16px;
         }
+        .discord-icon { width: 20px; height: 20px; }
     </style>
 </head>
 <body>
     <div class="login-card">
-        <div class="login-icon"><img src="/static/favicon.png" alt="Logo" style="width:56px;height:56px;border-radius:12px;object-fit:cover"></div>
+        <div class="login-icon"><img src="/static/favicon.png" alt="Logo"></div>
         <h1>Ice Dodo Dashboard</h1>
-        <p class="sub">Enter your password to continue</p>
+        <p class="sub">Sign in to continue</p>
+
         {% if error %}
         <div class="error">{{ error }}</div>
         {% endif %}
-        <form method="POST">
+
+        {% if discord_oauth_url %}
+        <a href="{{ discord_oauth_url }}" class="btn btn-discord">
+            <svg class="discord-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.08.114 18.102.134 18.115a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+            </svg>
+            Continue with Discord
+        </a>
+        <div class="divider">or sign in with password</div>
+        {% endif %}
+
+        <form method="POST" action="/login">
             <div style="margin-bottom:16px">
                 <label>Password</label>
                 <input type="password" name="password" placeholder="••••••••" autofocus required>
             </div>
-            <button type="submit" class="btn">Sign In</button>
+            <button type="submit" class="btn btn-pw">Sign In</button>
         </form>
     </div>
 </body>
