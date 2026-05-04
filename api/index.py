@@ -43,14 +43,12 @@ def login_required(f):
 def _discord_oauth_url():
     if not DISCORD_CLIENT_ID or not DISCORD_REDIRECT_URI:
         return None
-    state = secrets.token_urlsafe(16)
-    session['oauth_state'] = state
+    # No state param — Vercel serverless can't share session between redirect and callback
     params = (
         f"?client_id={DISCORD_CLIENT_ID}"
         f"&redirect_uri={DISCORD_REDIRECT_URI}"
         f"&response_type=code"
         f"&scope=identify"
-        f"&state={state}"
     )
     return f"https://discord.com/api/oauth2/authorize{params}"
 
@@ -72,7 +70,6 @@ def _get_guild_data():
     try:
         r = http_requests.get(f'{DISCORD_API}/guilds/{guild_id}/roles', headers=headers, timeout=5)
         roles = r.json() if r.ok else []
-        # Sort by position desc (highest role first)
         roles = sorted([ro for ro in roles if isinstance(ro, dict)], key=lambda x: x.get('position', 0), reverse=True)
     except Exception:
         roles = []
@@ -81,13 +78,12 @@ def _get_guild_data():
     try:
         r = http_requests.get(f'{DISCORD_API}/guilds/{guild_id}/channels', headers=headers, timeout=5)
         raw_channels = r.json() if r.ok else []
-        # Build category map
         cats = {c['id']: c['name'] for c in raw_channels if isinstance(c, dict) and c.get('type') == 4}
         channels = []
         for c in raw_channels:
             if not isinstance(c, dict):
                 continue
-            if c.get('type') in (0, 2, 15):  # text, voice, forum
+            if c.get('type') in (0, 2, 15):
                 channels.append({
                     'id': c['id'],
                     'name': c['name'],
@@ -96,7 +92,6 @@ def _get_guild_data():
                     'category': cats.get(str(c.get('parent_id', '')), 'No Category'),
                     'parent_id': c.get('parent_id'),
                 })
-        # Sort by category then position
         channels.sort(key=lambda x: (x['category'] or 'zzz', x['position']))
     except Exception:
         channels = []
@@ -172,13 +167,12 @@ def auth_discord():
 
 @app.route('/auth/discord/callback')
 def auth_discord_callback():
-    code  = request.args.get('code')
-    state = request.args.get('state')
+    code = request.args.get('code')
 
-    if not code or state != session.pop('oauth_state', None):
+    # No state check — Vercel serverless drops session between redirect and callback
+    if not code:
         return redirect(url_for('login'))
 
-    # Exchange code for token
     try:
         token_resp = http_requests.post(
             f'{DISCORD_API}/oauth2/token',
@@ -265,7 +259,6 @@ def members():
     houses = cur.fetchall()
     conn.close()
 
-    # Enrich with Discord data from guild members
     guild_data = _get_guild_data()
     member_map = {m['id']: m for m in guild_data.get('members', [])}
     role_map   = {r['id']: r for r in guild_data.get('roles', [])}
@@ -274,14 +267,12 @@ def members():
     for u in users_raw:
         uid = str(u['user_id'])
         dm  = member_map.get(uid, {})
-        # Build role list with colours
         discord_roles = []
         for rid in dm.get('roles', []):
             ro = role_map.get(rid)
             if ro and ro.get('name') != '@everyone':
                 color_int = ro.get('color', 0)
                 color_hex = format(color_int, '06x') if color_int else None
-                # Convert int to r,g,b for rgba usage
                 if color_int:
                     r_val = (color_int >> 16) & 0xFF
                     g_val = (color_int >> 8)  & 0xFF
@@ -416,7 +407,6 @@ def api_house_points(hname):
     cur  = conn.cursor()
     cur.execute('UPDATE houses SET house_points = house_points + %s WHERE name=%s', (modifier, hname.lower()))
 
-    # Get all members of the house and update + log each
     cur.execute('SELECT user_id FROM users WHERE house_id=%s', (hname.lower(),))
     members = cur.fetchall()
     for m in members:
@@ -428,7 +418,6 @@ def api_house_points(hname):
     pts = cur.fetchone()
     conn.close()
 
-    # Post to log channel via pending message
     _queue_log_embed(hname, None, amount, reason, action, actor_name)
 
     return jsonify({'success': True, 'points': pts['points'] if pts else 0})
@@ -484,7 +473,6 @@ def api_member_points(user_id):
     cur.execute('UPDATE users SET contributions_points = contributions_points + %s WHERE user_id=%s', (modifier, str(user_id)))
     cur.execute('UPDATE houses SET house_points = house_points + %s WHERE name=%s', (modifier, house_id))
 
-    # Resolve Discord username for log
     target_username = None
     target_avatar   = None
     guild_data = _get_guild_data()
@@ -500,7 +488,6 @@ def api_member_points(user_id):
     pts = cur.fetchone()
     conn.close()
 
-    # Post to log channel
     _queue_log_embed(house_id, target_username or user_id, amount, reason, action, actor_name)
 
     return jsonify({'success': True, 'points': pts['points']})
@@ -632,7 +619,7 @@ def api_save_settings():
     return jsonify({'success': True})
 
 # ---------------------------------------------------------------------------
-# Sticky / Messages API (kept for bot compatibility, no UI page)
+# Sticky / Messages API
 # ---------------------------------------------------------------------------
 @app.route('/api/sticky', methods=['GET'])
 @login_required
