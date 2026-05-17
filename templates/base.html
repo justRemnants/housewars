@@ -47,7 +47,6 @@
         .nav-link svg { width: 17px; height: 17px; flex-shrink: 0; }
         .sidebar-bottom { padding: 14px 10px; border-top: 1px solid var(--border); }
 
-        /* Discord user widget in sidebar */
         .sidebar-user {
             display: flex; align-items: center; gap: 10px; padding: 10px 12px;
             background: var(--surface2); border-radius: 10px; margin-bottom: 8px;
@@ -197,7 +196,7 @@
         .color-preset { width: 22px; height: 22px; border-radius: 5px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s, transform 0.1s; }
         .color-preset:hover { border-color: rgba(255,255,255,0.4); transform: scale(1.15); }
 
-        input[type="color"] { display: none; } /* hide native, use custom */
+        input[type="color"] { display: none; }
 
         .input-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -278,7 +277,6 @@
         .section-divider { height: 1px; background: var(--border); margin: 18px 0; }
         code { background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
 
-        /* Member card styles */
         .member-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface3); flex-shrink: 0; }
         .member-name { font-size: 14px; font-weight: 600; }
         .member-tag { font-size: 11px; color: var(--muted); }
@@ -288,6 +286,19 @@
             border: 1px solid transparent;
         }
         .role-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+        /* embed preview */
+        .preview-wrap { background: #313338; border-radius: 8px; padding: 16px; }
+        .dc-embed { border-left: 4px solid #5865f2; background: #2b2d31; border-radius: 4px; padding: 12px 14px; max-width: 440px; position: relative; }
+        .dc-author { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .dc-author-icon { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; background: #5865f2; }
+        .dc-author-name { font-size: 12px; font-weight: 700; color: #e3e5e8; }
+        .dc-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 5px; }
+        .dc-desc { font-size: 14px; color: #dbdee1; line-height: 1.5; }
+        .dc-thumb { position: absolute; top: 12px; right: 12px; width: 60px; height: 60px; border-radius: 4px; object-fit: cover; }
+        .dc-footer { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #3f4248; }
+        .dc-footer-icon { width: 16px; height: 16px; object-fit: cover; border-radius: 50%; }
+        .dc-footer-text { font-size: 12px; color: #949ba4; }
 
         @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
@@ -322,6 +333,10 @@
             <a href="/logs" class="nav-link {% if request.path == '/logs' %}active{% endif %}">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
                 Logs
+            </a>
+            <a href="/messages" class="nav-link {% if request.path == '/messages' %}active{% endif %}">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                Messages
             </a>
             <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -362,7 +377,6 @@
 
     <div class="toast-container" id="toastContainer"></div>
     <script>
-    /* ── Toast ── */
     function toast(msg, type='success') {
         const c = document.getElementById('toastContainer');
         const t = document.createElement('div');
@@ -386,294 +400,89 @@
         const swatch = document.getElementById(swatchId);
         const hexInput = document.getElementById(hexInputId);
         if (!swatch || !hexInput) return;
-
-        // Create panel
         const panel = document.createElement('div');
         panel.className = 'color-picker-panel';
         panel.innerHTML = `
             <div class="color-picker-gradient"><canvas width="228" height="140"></canvas><div class="color-picker-cursor" style="left:100%;top:0%"></div></div>
             <div class="color-picker-hue"><div class="color-picker-hue-thumb"></div></div>
-            <div class="color-picker-hex-row">
-                <input type="text" class="cp-hex-field" placeholder="#5865F2" maxlength="7">
-            </div>
+            <div class="color-picker-hex-row"><input type="text" class="cp-hex-field" placeholder="#5865F2" maxlength="7"></div>
             <div class="color-presets">${PRESETS.map(c=>`<div class="color-preset" style="background:${c}" data-color="${c}"></div>`).join('')}</div>
         `;
         swatch.parentElement.style.position = 'relative';
         swatch.parentElement.appendChild(panel);
-
         const canvas = panel.querySelector('canvas');
         const ctx = canvas.getContext('2d');
         const cursor = panel.querySelector('.color-picker-cursor');
         const hueTrack = panel.querySelector('.color-picker-hue');
         const hueThumb = panel.querySelector('.color-picker-hue-thumb');
         const cpHex = panel.querySelector('.cp-hex-field');
-
-        let hue = 220, sat = 0.6, val = 0.95;
-        let dragging = null;
-
-        function hsvToHex(h,s,v) {
-            let r,g,b;
-            const i=Math.floor(h/60)%6, f=h/60-Math.floor(h/60), p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
-            switch(i){case 0:r=v;g=t;b=p;break;case 1:r=q;g=v;b=p;break;case 2:r=p;g=v;b=t;break;case 3:r=p;g=q;b=v;break;case 4:r=t;g=p;b=v;break;default:r=v;g=p;b=q;}
-            return '#'+[r,g,b].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('').toUpperCase();
-        }
-
-        function hexToHsv(hex) {
-            hex = hex.replace('#','');
-            if(hex.length!==6) return null;
-            const r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
-            const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
-            let h=0, s=max===0?0:d/max, v=max;
-            if(d!==0){switch(max){case r:h=((g-b)/d)%6;break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;}h=Math.round(h*60);if(h<0)h+=360;}
-            return {h,s,v};
-        }
-
-        function drawGradient() {
-            const w=canvas.width, h=canvas.height;
-            const hueColor=`hsl(${hue},100%,50%)`;
-            const white=ctx.createLinearGradient(0,0,w,0);
-            white.addColorStop(0,'#fff'); white.addColorStop(1,hueColor);
-            ctx.fillStyle=white; ctx.fillRect(0,0,w,h);
-            const black=ctx.createLinearGradient(0,0,0,h);
-            black.addColorStop(0,'transparent'); black.addColorStop(1,'#000');
-            ctx.fillStyle=black; ctx.fillRect(0,0,w,h);
-        }
-
-        function updateAll(hex) {
-            swatch.style.background = hex;
-            hexInput.value = hex;
-            cpHex.value = hex;
-            if(onChangeCb) onChangeCb(hex);
-        }
-
-        function updateFromHSV() {
-            const hex = hsvToHex(hue, sat, val);
-            cursor.style.left = (sat*100)+'%';
-            cursor.style.top = ((1-val)*100)+'%';
-            cursor.style.background = hex;
-            hueThumb.style.left = (hue/360*100)+'%';
-            hueThumb.style.background = `hsl(${hue},100%,50%)`;
-            drawGradient();
-            updateAll(hex);
-        }
-
-        function setFromHex(hex) {
-            const hsv = hexToHsv(hex);
-            if(!hsv) return;
-            hue=hsv.h; sat=hsv.s; val=hsv.v;
-            updateFromHSV();
-        }
-
-        // Gradient drag
-        canvas.addEventListener('mousedown', e => { dragging='grad'; handleGrad(e); });
-        document.addEventListener('mousemove', e => { if(dragging==='grad') handleGrad(e); if(dragging==='hue') handleHue(e); });
-        document.addEventListener('mouseup', () => dragging=null);
-
-        function handleGrad(e) {
-            const rect = canvas.getBoundingClientRect();
-            sat = Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-            val = Math.max(0,Math.min(1,1-(e.clientY-rect.top)/rect.height));
-            updateFromHSV();
-        }
-        function handleHue(e) {
-            const rect = hueTrack.getBoundingClientRect();
-            hue = Math.max(0,Math.min(360,(e.clientX-rect.left)/rect.width*360));
-            updateFromHSV();
-        }
-        hueTrack.addEventListener('mousedown', e => { dragging='hue'; handleHue(e); });
-
-        // Touch support
-        canvas.addEventListener('touchstart', e => { dragging='grad'; handleGradTouch(e); }, {passive:true});
-        hueTrack.addEventListener('touchstart', e => { dragging='hue'; handleHueTouch(e); }, {passive:true});
-        document.addEventListener('touchmove', e => {
-            if(dragging==='grad') handleGradTouch(e);
-            if(dragging==='hue') handleHueTouch(e);
-        }, {passive:true});
-        document.addEventListener('touchend', () => dragging=null);
-        function handleGradTouch(e) { if(e.touches[0]) handleGrad(e.touches[0]); }
-        function handleHueTouch(e) { if(e.touches[0]) handleHue(e.touches[0]); }
-
-        cpHex.addEventListener('input', () => {
-            const v = cpHex.value.startsWith('#') ? cpHex.value : '#'+cpHex.value;
-            if(/^#[0-9a-fA-F]{6}$/.test(v)) setFromHex(v);
-        });
-        hexInput.addEventListener('input', () => {
-            const v = hexInput.value.startsWith('#') ? hexInput.value : '#'+hexInput.value;
-            if(/^#[0-9a-fA-F]{6}$/.test(v)) setFromHex(v);
-        });
-
-        panel.querySelectorAll('.color-preset').forEach(p => {
-            p.addEventListener('click', () => setFromHex(p.dataset.color));
-        });
-
-        // Open/close
-        swatch.addEventListener('click', e => {
-            e.stopPropagation();
-            // Close all other panels
-            document.querySelectorAll('.color-picker-panel.open').forEach(p => { if(p!==panel) p.classList.remove('open'); });
-            panel.classList.toggle('open');
-            if(panel.classList.contains('open')) {
-                setFromHex(hexInput.value || '#5865F2');
-            }
-        });
-        document.addEventListener('click', e => {
-            if(!panel.contains(e.target) && e.target!==swatch) panel.classList.remove('open');
-        });
-
-        // Init
-        setFromHex(hexInput.value || '#5865F2');
-        return { setHex: setFromHex };
+        let hue = 220, sat = 0.6, val = 0.95, dragging = null;
+        function hsvToHex(h,s,v){let r,g,b;const i=Math.floor(h/60)%6,f=h/60-Math.floor(h/60),p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);switch(i){case 0:r=v;g=t;b=p;break;case 1:r=q;g=v;b=p;break;case 2:r=p;g=v;b=t;break;case 3:r=p;g=q;b=v;break;case 4:r=t;g=p;b=v;break;default:r=v;g=p;b=q;}return '#'+[r,g,b].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('').toUpperCase();}
+        function hexToHsv(hex){hex=hex.replace('#','');if(hex.length!==6)return null;const r=parseInt(hex.slice(0,2),16)/255,g=parseInt(hex.slice(2,4),16)/255,b=parseInt(hex.slice(4,6),16)/255,max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;let h=0,s=max===0?0:d/max,v=max;if(d!==0){switch(max){case r:h=((g-b)/d)%6;break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;}h=Math.round(h*60);if(h<0)h+=360;}return{h,s,v};}
+        function drawGradient(){const w=canvas.width,h=canvas.height,hueColor=`hsl(${hue},100%,50%)`,white=ctx.createLinearGradient(0,0,w,0);white.addColorStop(0,'#fff');white.addColorStop(1,hueColor);ctx.fillStyle=white;ctx.fillRect(0,0,w,h);const black=ctx.createLinearGradient(0,0,0,h);black.addColorStop(0,'transparent');black.addColorStop(1,'#000');ctx.fillStyle=black;ctx.fillRect(0,0,w,h);}
+        function updateAll(hex){swatch.style.background=hex;hexInput.value=hex;cpHex.value=hex;if(onChangeCb)onChangeCb(hex);}
+        function updateFromHSV(){const hex=hsvToHex(hue,sat,val);cursor.style.left=(sat*100)+'%';cursor.style.top=((1-val)*100)+'%';cursor.style.background=hex;hueThumb.style.left=(hue/360*100)+'%';hueThumb.style.background=`hsl(${hue},100%,50%)`;drawGradient();updateAll(hex);}
+        function setFromHex(hex){const hsv=hexToHsv(hex);if(!hsv)return;hue=hsv.h;sat=hsv.s;val=hsv.v;updateFromHSV();}
+        canvas.addEventListener('mousedown',e=>{dragging='grad';handleGrad(e);});
+        document.addEventListener('mousemove',e=>{if(dragging==='grad')handleGrad(e);if(dragging==='hue')handleHue(e);});
+        document.addEventListener('mouseup',()=>dragging=null);
+        function handleGrad(e){const rect=canvas.getBoundingClientRect();sat=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));val=Math.max(0,Math.min(1,1-(e.clientY-rect.top)/rect.height));updateFromHSV();}
+        function handleHue(e){const rect=hueTrack.getBoundingClientRect();hue=Math.max(0,Math.min(360,(e.clientX-rect.left)/rect.width*360));updateFromHSV();}
+        hueTrack.addEventListener('mousedown',e=>{dragging='hue';handleHue(e);});
+        canvas.addEventListener('touchstart',e=>{dragging='grad';if(e.touches[0])handleGrad(e.touches[0]);},{passive:true});
+        hueTrack.addEventListener('touchstart',e=>{dragging='hue';if(e.touches[0])handleHue(e.touches[0]);},{passive:true});
+        document.addEventListener('touchmove',e=>{if(dragging==='grad'&&e.touches[0])handleGrad(e.touches[0]);if(dragging==='hue'&&e.touches[0])handleHue(e.touches[0]);},{passive:true});
+        document.addEventListener('touchend',()=>dragging=null);
+        cpHex.addEventListener('input',()=>{const v=cpHex.value.startsWith('#')?cpHex.value:'#'+cpHex.value;if(/^#[0-9a-fA-F]{6}$/.test(v))setFromHex(v);});
+        hexInput.addEventListener('input',()=>{const v=hexInput.value.startsWith('#')?hexInput.value:'#'+hexInput.value;if(/^#[0-9a-fA-F]{6}$/.test(v))setFromHex(v);});
+        panel.querySelectorAll('.color-preset').forEach(p=>p.addEventListener('click',()=>setFromHex(p.dataset.color)));
+        swatch.addEventListener('click',e=>{e.stopPropagation();document.querySelectorAll('.color-picker-panel.open').forEach(p=>{if(p!==panel)p.classList.remove('open');});panel.classList.toggle('open');if(panel.classList.contains('open'))setFromHex(hexInput.value||'#5865F2');});
+        document.addEventListener('click',e=>{if(!panel.contains(e.target)&&e.target!==swatch)panel.classList.remove('open');});
+        setFromHex(hexInput.value||'#5865F2');
+        return{setHex:setFromHex};
     }
 
     /* ── Searchable Select ── */
     function createSearchSelect(containerId, options, onSelect, placeholder='Select…') {
-        // options: [{value, label, sublabel, avatarUrl, colorDot, icon, category}]
         const container = document.getElementById(containerId);
         if(!container) return;
         container.innerHTML = '';
         container.className = 'search-select';
-
         let selected = null;
-        let highlighted = -1;
-
         const trigger = document.createElement('div');
         trigger.className = 'search-select-input';
         trigger.tabIndex = 0;
-
         const dropdown = document.createElement('div');
         dropdown.className = 'search-select-dropdown';
-        dropdown.innerHTML = `
-            <div class="search-select-search">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                <input type="text" placeholder="Search…" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="search-select-list"></div>
-        `;
+        dropdown.innerHTML = `<div class="search-select-search"><svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input type="text" placeholder="Search…" autocomplete="off" spellcheck="false"></div><div class="search-select-list"></div>`;
         container.appendChild(trigger);
         container.appendChild(dropdown);
-
         const searchInput = dropdown.querySelector('input');
         const list = dropdown.querySelector('.search-select-list');
-
-        function renderOption(opt) {
-            const div = document.createElement('div');
-            div.className = 'search-select-option';
-            if(selected && selected.value === opt.value) div.classList.add('selected');
-            let inner = '';
-            if(opt.avatarUrl) inner += `<img class="search-select-avatar" src="${opt.avatarUrl}" alt="" onerror="this.style.display='none'">`;
-            else if(opt.colorDot !== undefined) inner += `<div class="search-select-role-dot" style="background:${opt.colorDot||'#72767d'}"></div>`;
-            else if(opt.icon) inner += `<span class="search-select-channel-icon">${opt.icon}</span>`;
-            inner += `<div><div style="font-size:13px;font-weight:500">${opt.label}</div>${opt.sublabel?`<div style="font-size:11px;color:var(--muted)">${opt.sublabel}</div>`:''}`;
-            inner += '</div>';
-            div.innerHTML = inner;
-            div.addEventListener('click', () => selectOption(opt));
-            return div;
-        }
-
-        function renderList(filter='') {
-            list.innerHTML = '';
-            const q = filter.toLowerCase();
-            let allOpts = options.filter(o => !q || o.label.toLowerCase().includes(q) || (o.sublabel||'').toLowerCase().includes(q));
-            if(!allOpts.length) { list.innerHTML = `<div class="search-select-empty">No results</div>`; return; }
-
-            // Group by category
-            const cats = {};
-            allOpts.forEach(o => { const c = o.category||''; if(!cats[c]) cats[c]=[]; cats[c].push(o); });
-            Object.entries(cats).forEach(([cat, opts]) => {
-                if(cat) { const ch = document.createElement('div'); ch.className='search-select-category'; ch.textContent=cat; list.appendChild(ch); }
-                opts.forEach(o => list.appendChild(renderOption(o)));
-            });
-        }
-
-        function renderTrigger() {
-            if(!selected) {
-                trigger.innerHTML = `<span class="search-select-placeholder">${placeholder}</span><svg class="search-select-chevron" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>`;
-            } else {
-                let inner = '<div class="search-select-value">';
-                if(selected.avatarUrl) inner += `<img class="search-select-avatar" src="${selected.avatarUrl}" alt="" onerror="this.style.display='none'">`;
-                else if(selected.colorDot !== undefined) inner += `<div class="search-select-role-dot" style="background:${selected.colorDot||'#72767d'}"></div>`;
-                else if(selected.icon) inner += `<span class="search-select-channel-icon">${selected.icon}</span>`;
-                inner += `<span>${selected.label}</span></div>`;
-                inner += `<svg class="search-select-chevron" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>`;
-                trigger.innerHTML = inner;
-            }
-        }
-
-        function selectOption(opt) {
-            selected = opt;
-            renderTrigger();
-            close();
-            if(onSelect) onSelect(opt);
-        }
-
-        function open() {
-            dropdown.classList.add('open');
-            trigger.classList.add('open');
-            searchInput.value = '';
-            renderList('');
-            searchInput.focus();
-        }
-        function close() {
-            dropdown.classList.remove('open');
-            trigger.classList.remove('open');
-        }
-
-        trigger.addEventListener('click', e => { e.stopPropagation(); dropdown.classList.contains('open') ? close() : open(); });
-        searchInput.addEventListener('input', () => renderList(searchInput.value));
-        document.addEventListener('click', e => { if(!container.contains(e.target)) close(); });
-
+        function renderOption(opt){const div=document.createElement('div');div.className='search-select-option';if(selected&&selected.value===opt.value)div.classList.add('selected');let inner='';if(opt.avatarUrl)inner+=`<img class="search-select-avatar" src="${opt.avatarUrl}" alt="" onerror="this.style.display='none'">`;else if(opt.colorDot!==undefined)inner+=`<div class="search-select-role-dot" style="background:${opt.colorDot||'#72767d'}"></div>`;else if(opt.icon)inner+=`<span class="search-select-channel-icon">${opt.icon}</span>`;inner+=`<div><div style="font-size:13px;font-weight:500">${opt.label}</div>${opt.sublabel?`<div style="font-size:11px;color:var(--muted)">${opt.sublabel}</div>`:''}</div>`;div.innerHTML=inner;div.addEventListener('click',()=>selectOption(opt));return div;}
+        function renderList(filter=''){list.innerHTML='';const q=filter.toLowerCase();let allOpts=options.filter(o=>!q||o.label.toLowerCase().includes(q)||(o.sublabel||'').toLowerCase().includes(q));if(!allOpts.length){list.innerHTML=`<div class="search-select-empty">No results</div>`;return;}const cats={};allOpts.forEach(o=>{const c=o.category||'';if(!cats[c])cats[c]=[];cats[c].push(o);});Object.entries(cats).forEach(([cat,opts])=>{if(cat){const ch=document.createElement('div');ch.className='search-select-category';ch.textContent=cat;list.appendChild(ch);}opts.forEach(o=>list.appendChild(renderOption(o)));});}
+        function renderTrigger(){if(!selected){trigger.innerHTML=`<span class="search-select-placeholder">${placeholder}</span><svg class="search-select-chevron" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>`;}else{let inner='<div class="search-select-value">';if(selected.avatarUrl)inner+=`<img class="search-select-avatar" src="${selected.avatarUrl}" alt="" onerror="this.style.display='none'">`;else if(selected.colorDot!==undefined)inner+=`<div class="search-select-role-dot" style="background:${selected.colorDot||'#72767d'}"></div>`;else if(selected.icon)inner+=`<span class="search-select-channel-icon">${selected.icon}</span>`;inner+=`<span>${selected.label}</span></div>`;inner+=`<svg class="search-select-chevron" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>`;trigger.innerHTML=inner;}}
+        function selectOption(opt){selected=opt;renderTrigger();close();if(onSelect)onSelect(opt);}
+        function open(){dropdown.classList.add('open');trigger.classList.add('open');searchInput.value='';renderList('');searchInput.focus();}
+        function close(){dropdown.classList.remove('open');trigger.classList.remove('open');}
+        trigger.addEventListener('click',e=>{e.stopPropagation();dropdown.classList.contains('open')?close():open();});
+        searchInput.addEventListener('input',()=>renderList(searchInput.value));
+        document.addEventListener('click',e=>{if(!container.contains(e.target))close();});
         renderTrigger();
         renderList();
-
-        return {
-            getValue: () => selected?.value || null,
-            getSelected: () => selected,
-            setValue: (val) => {
-                const opt = options.find(o => o.value === val);
-                if(opt) selectOption(opt);
-            },
-            updateOptions: (newOpts) => {
-                options.length = 0; options.push(...newOpts);
-                renderList(searchInput.value);
-                renderTrigger();
-            }
-        };
+        return{getValue:()=>selected?.value||null,getSelected:()=>selected,setValue:(val)=>{const opt=options.find(o=>o.value===val);if(opt)selectOption(opt);},updateOptions:(newOpts)=>{options.length=0;options.push(...newOpts);renderList(searchInput.value);renderTrigger();}};
     }
 
     /* ── Guild data cache ── */
     let _guildData = null;
     async function getGuildData() {
         if(_guildData) return _guildData;
-        try {
-            const r = await fetch('/api/guild-data');
-            if(r.ok) { _guildData = await r.json(); return _guildData; }
-        } catch(e) {}
-        return {members:[], channels:[], roles:[]};
+        try { const r=await fetch('/api/guild-data'); if(r.ok){_guildData=await r.json();return _guildData;} } catch(e){}
+        return {members:[],channels:[],roles:[]};
     }
-
-    function memberOptions(members) {
-        return members.map(m => ({
-            value: m.id, label: m.display_name||m.username,
-            sublabel: '@'+m.username,
-            avatarUrl: m.avatar ? `https://cdn.discordapp.com/avatars/${m.id}/${m.avatar}.png?size=32` : null,
-            category: ''
-        }));
-    }
-    function channelOptions(channels) {
-        // channels: [{id, name, type, category}]
-        return channels.map(c => ({
-            value: c.id, label: c.name,
-            icon: c.type === 0 ? '#' : c.type === 2 ? '🔊' : c.type === 15 ? '📋' : '#',
-            category: c.category || 'No Category'
-        }));
-    }
-    function roleOptions(roles) {
-        return roles.filter(r => r.name !== '@everyone').map(r => ({
-            value: r.id, label: r.name,
-            colorDot: r.color ? '#' + r.color.toString(16).padStart(6,'0') : '#72767d',
-            category: ''
-        }));
-    }
+    function memberOptions(members){return members.map(m=>({value:m.id,label:m.display_name||m.username,sublabel:'@'+m.username,avatarUrl:m.avatar?`https://cdn.discordapp.com/avatars/${m.id}/${m.avatar}.png?size=32`:null,category:''}));}
+    function channelOptions(channels){return channels.map(c=>({value:c.id,label:c.name,icon:c.type===0?'#':c.type===2?'🔊':c.type===5?'📢':c.type===15?'📋':'#',category:c.category||'No Category'}));}
+    function roleOptions(roles){return roles.filter(r=>r.name!=='@everyone').map(r=>({value:r.id,label:r.name,colorDot:r.color?'#'+r.color.toString(16).padStart(6,'0'):'#72767d',category:''}));}
     </script>
     {% block scripts %}{% endblock %}
 </body>
