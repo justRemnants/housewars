@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+{% block title %} — Messages{% endblock %}
+{% block page_title %}Messages{% endblock %}
+{% block page_sub %}Sticky messages and send custom embeds to any channel{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('sendModal')">✉️ Send Message</button>
+<button class="btn btn-ghost btn-sm" onclick="openModal('stickyModal')">📌 New Sticky</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Sticky Messages ── -->
+<div class="card">
+    <div class="card-header">
+        <div><h3>📌 Sticky Messages</h3><p>Re-posted after every message in that channel</p></div>
+    </div>
+    {% if stickies %}
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Channel ID</th><th>Title</th><th>Colour</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="stickyBody">
+            {% for s in stickies %}
+            <tr id="srow-{{ s.id }}">
+                <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ s.channel_id }}</td>
+                <td><strong>{{ s.title or '(no title)' }}</strong>
+                    {% if s.description %}<div style="font-size:12px;color:var(--muted);margin-top:2px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.description }}</div>{% endif %}
+                </td>
+                <td>
+                    <div class="flex items-center gap-8">
+                        <span class="color-dot" style="background:#{{ s.color or '5865f2' }}"></span>
+                        <code>#{{ s.color or '5865f2' }}</code>
+                    </div>
+                </td>
+                <td>
+                    <span id="stoggle-{{ s.id }}" class="badge {% if s.active %}badge-green{% else %}badge-red{% endif %}">
+                        {% if s.active %}Active{% else %}Paused{% endif %}
+                    </span>
+                </td>
+                <td>
+                    <div class="flex gap-8">
+                        <button class="btn btn-ghost btn-sm" onclick="openEditSticky({{ s.id }}, '{{ s.title|replace("'","\\'")|e }}', `{{ s.description|replace('`','\\`')|e }}`, '{{ s.color }}', '{{ s.image_url }}', '{{ s.thumbnail_url }}', '{{ s.footer_text|replace("'","\\'")|e }}', '{{ s.footer_icon }}', '{{ s.button_label|replace("'","\\'")|e }}', '{{ s.button_url }}')">✏️ Edit</button>
+                        <button class="btn btn-warning btn-sm" onclick="toggleSticky({{ s.id }})">⏸ Toggle</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteSticky({{ s.id }})">🗑</button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;color:var(--muted);padding:40px 0">
+        No sticky messages yet. Create one with the button above.
+    </div>
+    {% endif %}
+</div>
+
+<!-- ── Message Templates ── -->
+<div class="card mt-24">
+    <div class="card-header">
+        <div><h3>📄 Saved Templates</h3><p>Reusable embed templates — click to load into the send panel</p></div>
+        <button class="btn btn-ghost btn-sm" onclick="openSaveTemplate()">+ Save Current</button>
+    </div>
+    <div id="templatesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
+    {% if templates %}
+        {% for t in templates %}
+        <div class="template-card" id="tcard-{{ t.id }}" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;transition:border-color 0.15s" onclick="loadTemplate({{ t.id }}, '{{ t.title|replace("'","\\'")|e }}', `{{ t.description|replace('`','\\`')|e }}`, '{{ t.color }}', '{{ t.image_url }}', '{{ t.thumbnail_url }}', '{{ t.footer_text|replace("'","\\'")|e }}', '{{ t.footer_icon }}', '{{ t.button_label|replace("'","\\'")|e }}', '{{ t.button_url }}')">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                    <div style="font-size:13px;font-weight:600">{{ t.name }}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:2px">{{ t.title or '(no title)' }}</div>
+                </div>
+                <div style="display:flex;gap:6px">
+                    <span class="color-dot" style="background:#{{ t.color or '5865f2' }};margin-top:2px"></span>
+                    <button class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px" onclick="event.stopPropagation();deleteTemplate({{ t.id }})">🗑</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="color:var(--muted);font-size:13px;padding:8px 0;grid-column:1/-1">No templates saved yet.</div>
+    {% endif %}
+    </div>
+</div>
+
+<!-- ── Send Message Modal ── -->
+<div id="sendModal" class="modal-overlay">
+    <div class="modal" style="max-width:560px">
+        <h3>✉️ Send Embed Message</h3>
+        <p>Compose an embed and send it to any channel right now.</p>
+        <div class="form-group">
+            <label>Channel</label>
+            <div id="sendChannelSelect"></div>
+        </div>
+        <div class="form-group"><label>Title</label><input type="text" id="s_title" placeholder="Embed title"></div>
+        <div class="form-group"><label>Description</label><textarea id="s_desc" rows="4" placeholder="Embed body text — supports Discord markdown"></textarea></div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Colour</label>
+                <div class="color-picker-wrap">
+                    <div class="color-swatch-btn" id="s_swatch" style="background:#5865F2"></div>
+                    <input type="text" id="s_color" value="#5865F2" style="font-family:monospace">
+                </div>
+            </div>
+            <div class="form-group"><label>Image URL</label><input type="text" id="s_image" placeholder="https://..."></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Thumbnail URL</label><input type="text" id="s_thumb" placeholder="https://..."></div>
+            <div class="form-group"><label>Footer Text</label><input type="text" id="s_footer_text" placeholder="Footer"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Footer Icon URL</label><input type="text" id="s_footer_icon" placeholder="https://..."></div>
+            <div class="form-group"><label>Author Name</label><input type="text" id="s_author_name" placeholder="Author"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Button Label</label><input type="text" id="s_btn_label" placeholder="Click here"></div>
+            <div class="form-group"><label>Button URL</label><input type="text" id="s_btn_url" placeholder="https://..."></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('sendModal')">Cancel</button>
+            <button class="btn btn-ghost btn-sm" onclick="saveAsTemplate()" style="margin-right:auto">💾 Save as Template</button>
+            <button class="btn btn-primary" onclick="sendMessage()">Send ✉️</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── New Sticky Modal ── -->
+<div id="stickyModal" class="modal-overlay">
+    <div class="modal" style="max-width:540px">
+        <h3>📌 New Sticky Message</h3>
+        <p>This embed will be re-posted after every message sent in the chosen channel.</p>
+        <div class="form-group">
+            <label>Channel</label>
+            <div id="stickyChannelSelect"></div>
+        </div>
+        <div class="form-group"><label>Title</label><input type="text" id="st_title" placeholder="Embed title"></div>
+        <div class="form-group"><label>Description</label><textarea id="st_desc" rows="3" placeholder="Body text"></textarea></div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Colour</label>
+                <div class="color-picker-wrap">
+                    <div class="color-swatch-btn" id="st_swatch" style="background:#5865F2"></div>
+                    <input type="text" id="st_color" value="#5865F2" style="font-family:monospace">
+                </div>
+            </div>
+            <div class="form-group"><label>Thumbnail URL</label><input type="text" id="st_thumb" placeholder="https://..."></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Footer Text</label><input type="text" id="st_footer_text" placeholder="Footer"></div>
+            <div class="form-group"><label>Footer Icon URL</label><input type="text" id="st_footer_icon" placeholder="https://..."></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Button Label</label><input type="text" id="st_btn_label" placeholder="Click here"></div>
+            <div class="form-group"><label>Button URL</label><input type="text" id="st_btn_url" placeholder="https://..."></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('stickyModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="createSticky()">Create Sticky</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Edit Sticky Modal ── -->
+<div id="editStickyModal" class="modal-overlay">
+    <div class="modal" style="max-width:540px">
+        <h3>✏️ Edit Sticky</h3>
+        <p>Update the sticky message content.</p>
+        <div class="form-group"><label>Title</label><input type="text" id="es_title"></div>
+        <div class="form-group"><label>Description</label><textarea id="es_desc" rows="3"></textarea></div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Colour</label>
+                <div class="color-picker-wrap">
+                    <div class="color-swatch-btn" id="es_swatch" style="background:#5865F2"></div>
+                    <input type="text" id="es_color" style="font-family:monospace">
+                </div>
+            </div>
+            <div class="form-group"><label>Thumbnail URL</label><input type="text" id="es_thumb"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Footer Text</label><input type="text" id="es_footer_text"></div>
+            <div class="form-group"><label>Footer Icon URL</label><input type="text" id="es_footer_icon"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Button Label</label><input type="text" id="es_btn_label"></div>
+            <div class="form-group"><label>Button URL</label><input type="text" id="es_btn_url"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('editStickyModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEditSticky()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Save Template Modal -->
+<div id="saveTemplateModal" class="modal-overlay">
+    <div class="modal">
+        <h3>💾 Save as Template</h3>
+        <p>Give this embed a name so you can reuse it later.</p>
+        <div class="form-group"><label>Template Name</label><input type="text" id="tname" placeholder="e.g. Event Announcement"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('saveTemplateModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="doSaveTemplate()">Save Template</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let sendChannelSel = null, stickyChannelSel = null;
+let sPicker = null, stPicker = null, esPicker = null;
+let curStickyId = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    sPicker  = createColorPicker('s_swatch',  's_color');
+    stPicker = createColorPicker('st_swatch', 'st_color');
+    esPicker = createColorPicker('es_swatch', 'es_color');
+
+    const gd    = await getGuildData();
+    const cOpts = channelOptions(gd.channels || []);
+    sendChannelSel   = createSearchSelect('sendChannelSelect',   cOpts,        null, 'Search channel…');
+    stickyChannelSel = createSearchSelect('stickyChannelSelect', [...cOpts],   null, 'Search channel…');
+});
+
+/* ── Send message ── */
+async function sendMessage() {
+    const cid = sendChannelSel?.getValue();
+    if (!cid) return toast('Select a channel.', 'error');
+    const payload = {
+        channel_id:   cid,
+        title:        document.getElementById('s_title').value,
+        description:  document.getElementById('s_desc').value,
+        color:        document.getElementById('s_color').value,
+        image_url:    document.getElementById('s_image').value,
+        thumbnail_url:document.getElementById('s_thumb').value,
+        footer_text:  document.getElementById('s_footer_text').value,
+        footer_icon:  document.getElementById('s_footer_icon').value,
+        author_name:  document.getElementById('s_author_name').value,
+        button_label: document.getElementById('s_btn_label').value,
+        button_url:   document.getElementById('s_btn_url').value,
+    };
+    const r = await fetch('/api/send-message', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    if (r.ok) { toast('Message queued! Bot will send within 2 seconds.'); closeModal('sendModal'); }
+    else toast('Failed to queue message.', 'error');
+}
+
+/* ── Sticky messages ── */
+async function createSticky() {
+    const cid = stickyChannelSel?.getValue();
+    if (!cid) return toast('Select a channel.', 'error');
+    const payload = {
+        channel_id:   cid,
+        title:        document.getElementById('st_title').value,
+        description:  document.getElementById('st_desc').value,
+        color:        document.getElementById('st_color').value,
+        thumbnail_url:document.getElementById('st_thumb').value,
+        footer_text:  document.getElementById('st_footer_text').value,
+        footer_icon:  document.getElementById('st_footer_icon').value,
+        button_label: document.getElementById('st_btn_label').value,
+        button_url:   document.getElementById('st_btn_url').value,
+    };
+    const r = await fetch('/api/sticky', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    if (r.ok) { toast('Sticky created!'); closeModal('stickyModal'); setTimeout(()=>location.reload(), 800); }
+    else toast('Failed to create sticky.', 'error');
+}
+
+function openEditSticky(id, title, desc, color, imageUrl, thumbUrl, footerText, footerIcon, btnLabel, btnUrl) {
+    curStickyId = id;
+    document.getElementById('es_title').value       = title;
+    document.getElementById('es_desc').value        = desc;
+    document.getElementById('es_thumb').value       = thumbUrl;
+    document.getElementById('es_footer_text').value = footerText;
+    document.getElementById('es_footer_icon').value = footerIcon;
+    document.getElementById('es_btn_label').value   = btnLabel;
+    document.getElementById('es_btn_url').value     = btnUrl;
+    const hex = '#' + (color || '5865F2').replace('#','');
+    document.getElementById('es_color').value = hex;
+    if (esPicker) esPicker.setHex(hex);
+    openModal('editStickyModal');
+}
+async function saveEditSticky() {
+    const payload = {
+        title:        document.getElementById('es_title').value,
+        description:  document.getElementById('es_desc').value,
+        color:        document.getElementById('es_color').value,
+        thumbnail_url:document.getElementById('es_thumb').value,
+        footer_text:  document.getElementById('es_footer_text').value,
+        footer_icon:  document.getElementById('es_footer_icon').value,
+        button_label: document.getElementById('es_btn_label').value,
+        button_url:   document.getElementById('es_btn_url').value,
+    };
+    const r = await fetch(`/api/sticky/${curStickyId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    if (r.ok) { toast('Sticky updated!'); closeModal('editStickyModal'); setTimeout(()=>location.reload(), 600); }
+    else toast('Failed.', 'error');
+}
+
+async function toggleSticky(id) {
+    const r = await fetch(`/api/sticky/${id}/toggle`, { method:'POST' });
+    if (r.ok) {
+        const d   = await r.json();
+        const el  = document.getElementById('stoggle-' + id);
+        el.textContent = d.active ? 'Active' : 'Paused';
+        el.className   = 'badge ' + (d.active ? 'badge-green' : 'badge-red');
+        toast(d.active ? 'Sticky activated.' : 'Sticky paused.');
+    } else toast('Failed.', 'error');
+}
+
+async function deleteSticky(id) {
+    if (!confirm('Delete this sticky message?')) return;
+    const r = await fetch(`/api/sticky/${id}`, { method:'DELETE' });
+    if (r.ok) { document.getElementById('srow-' + id)?.remove(); toast('Sticky deleted.'); }
+    else toast('Failed.', 'error');
+}
+
+/* ── Templates ── */
+function loadTemplate(id, title, desc, color, imageUrl, thumbUrl, footerText, footerIcon, btnLabel, btnUrl) {
+    document.getElementById('s_title').value       = title;
+    document.getElementById('s_desc').value        = desc;
+    document.getElementById('s_image').value       = imageUrl;
+    document.getElementById('s_thumb').value       = thumbUrl;
+    document.getElementById('s_footer_text').value = footerText;
+    document.getElementById('s_footer_icon').value = footerIcon;
+    document.getElementById('s_btn_label').value   = btnLabel;
+    document.getElementById('s_btn_url').value     = btnUrl;
+    const hex = '#' + (color || '5865F2').replace('#','');
+    document.getElementById('s_color').value = hex;
+    if (sPicker) sPicker.setHex(hex);
+    openModal('sendModal');
+    toast('Template loaded into send panel.', 'info');
+}
+
+function openSaveTemplate() { openModal('saveTemplateModal'); }
+
+async function doSaveTemplate() {
+    const name = document.getElementById('tname').value.trim();
+    if (!name) return toast('Enter a template name.', 'error');
+    const payload = {
+        name,
+        title:        document.getElementById('s_title').value,
+        description:  document.getElementById('s_desc').value,
+        color:        document.getElementById('s_color').value,
+        image_url:    document.getElementById('s_image').value,
+        thumbnail_url:document.getElementById('s_thumb').value,
+        footer_text:  document.getElementById('s_footer_text').value,
+        footer_icon:  document.getElementById('s_footer_icon').value,
+        button_label: document.getElementById('s_btn_label').value,
+        button_url:   document.getElementById('s_btn_url').value,
+    };
+    const r = await fetch('/api/templates', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    if (r.ok) { toast('Template saved!'); closeModal('saveTemplateModal'); setTimeout(()=>location.reload(), 800); }
+    else toast('Failed.', 'error');
+}
+
+function saveAsTemplate() {
+    document.getElementById('tname').value = '';
+    closeModal('sendModal');
+    openModal('saveTemplateModal');
+}
+
+async function deleteTemplate(id) {
+    if (!confirm('Delete this template?')) return;
+    const r = await fetch(`/api/templates/${id}`, { method:'DELETE' });
+    if (r.ok) { document.getElementById('tcard-' + id)?.remove(); toast('Template deleted.'); }
+    else toast('Failed.', 'error');
+}
+</script>
+{% endblock %}
