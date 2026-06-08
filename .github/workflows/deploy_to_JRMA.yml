@@ -1,11 +1,9 @@
 name: Auto Deploy to JRMA
-
 on:
   push:
     branches:
-      - main  # This makes it AUTO-RUN every time you push code
-  workflow_dispatch: # This adds a "Run Workflow" button for manual runs
-
+      - main
+  workflow_dispatch:
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -15,7 +13,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Force Push to JRMA
+      - name: Force Push to JRMA (with retry)
         run: |
           git remote add jrma ${{ secrets.JRMA_REMOTE_URL }}
-          git push -u jrma HEAD:deploy
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i..."
+            git push -f jrma HEAD:deploy && break
+            echo "Failed, waiting 15s before retry..."
+            sleep 15
+          done
