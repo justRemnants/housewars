@@ -87,33 +87,49 @@ _house_cache_time  = 0
 # ---------------------------------------------------------------------------
 # Config / house cache
 # ---------------------------------------------------------------------------
+def _load_cfg_sync():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute('SELECT key, value FROM server_config')
+        return {r['key']: r['value'] for r in cur.fetchall()}
+    finally:
+        return_db(conn)
+
+def _load_houses_sync():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute('SELECT name, color, thumbnail_url FROM houses')
+        return {r['name']: r for r in cur.fetchall()}
+    finally:
+        return_db(conn)
+
 def get_cfg():
     global _config_cache, _config_cache_time
     now = time.time()
     if now - _config_cache_time > 120:
-        conn = get_db()
-        try:
-            cur = conn.cursor()
-            cur.execute('SELECT key, value FROM server_config')
-            _config_cache      = {r['key']: r['value'] for r in cur.fetchall()}
-            _config_cache_time = now
-        finally:
-            return_db(conn)
+        _config_cache      = _load_cfg_sync()
+        _config_cache_time = now
     return _config_cache
 
 def get_house_data(house_name):
     global _house_cache, _house_cache_time
     now = time.time()
     if now - _house_cache_time > 60:
-        conn = get_db()
-        try:
-            cur = conn.cursor()
-            cur.execute('SELECT name, color, thumbnail_url FROM houses')
-            _house_cache      = {r['name']: r for r in cur.fetchall()}
-            _house_cache_time = now
-        finally:
-            return_db(conn)
+        _house_cache      = _load_houses_sync()
+        _house_cache_time = now
     return _house_cache.get(house_name.lower())
+
+async def get_cfg_async():
+    global _config_cache, _config_cache_time
+    now = time.time()
+    if now - _config_cache_time > 120:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        _config_cache      = await loop.run_in_executor(_db_executor, _load_cfg_sync)
+        _config_cache_time = now
+    return _config_cache
 
 # ---------------------------------------------------------------------------
 # Embed builders
@@ -209,67 +225,108 @@ async def log_action(title, desc):
 
 # ---------------------------------------------------------------------------
 # Background task — pending messages + role assignments
+#
+# All DB work is done in a thread executor so it never blocks the event loop.
+# Blocking the loop for >40s causes the "Can't keep up" gateway warnings.
 # ---------------------------------------------------------------------------
-@tasks.loop(seconds=2)
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+_db_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='db')
+
+def _fetch_pending_sync():
+    """Run in executor: fetch pending rows, mark sent, return data to process."""
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM pending_messages WHERE sent=FALSE LIMIT 3")
+        messages = cur.fetchall()
+        cur.execute("SELECT value FROM server_config WHERE key='guild_id'")
+        guild_row = cur.fetchone()
+        actions = []
+        if guild_row and guild_row['value']:
+            cur.execute("SELECT * FROM pending_actions WHERE action_type='assign' AND done=FALSE LIMIT 5")
+            actions = cur.fetchall()
+        return messages, guild_row, actions
+    finally:
+        return_db(conn)
+
+def _mark_message_sent_sync(msg_id):
+    conn = get_db()
+    try:
+        conn.cursor().execute("UPDATE pending_messages SET sent=TRUE WHERE id=%s", (msg_id,))
+    finally:
+        return_db(conn)
+
+def _mark_action_done_sync(action_id):
+    conn = get_db()
+    try:
+        conn.cursor().execute("UPDATE pending_actions SET done=TRUE WHERE id=%s", (action_id,))
+    finally:
+        return_db(conn)
+
+def _get_house_role_sync(house_name):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT role_id FROM houses WHERE name=%s", (house_name,))
+        return cur.fetchone()
+    finally:
+        return_db(conn)
+
+@tasks.loop(seconds=3)
 async def process_pending():
     try:
-        conn = get_db()
-        try:
-            cur = conn.cursor()
+        loop = asyncio.get_event_loop()
+        messages, guild_row, actions = await loop.run_in_executor(
+            _db_executor, _fetch_pending_sync)
 
-            # Pending messages
-            cur.execute("SELECT * FROM pending_messages WHERE sent=FALSE LIMIT 3")
-            for msg in cur.fetchall():
-                channel = await get_channel(int(msg['channel_id']))
-                if not channel:
-                    cur.execute("UPDATE pending_messages SET sent=TRUE WHERE id=%s", (msg['id'],))
-                    continue
-                try:
-                    ed  = json.loads(msg['embed_json'])
-                    cv  = ed.get('color','5865F2')
-                    try: ci = int(cv) if str(cv).isdigit() else int(str(cv).lstrip('#'),16)
-                    except: ci = 0x5865F2
-                    e = discord.Embed(title=ed.get('title',''), description=ed.get('description',''), color=ci)
-                    if ed.get('image_url'):     e.set_image(url=ed['image_url'])
-                    if ed.get('thumbnail_url'): e.set_thumbnail(url=ed['thumbnail_url'])
-                    ft, fi = ed.get('footer_text',''), ed.get('footer_icon','')
-                    if ft: e.set_footer(text=ft, icon_url=fi) if fi else e.set_footer(text=ft)
-                    if ed.get('author_name'):
-                        e.set_author(name=ed['author_name'], icon_url=ed['author_icon']) if ed.get('author_icon') else e.set_author(name=ed['author_name'])
-                    view = None
-                    if msg['button_label'] and msg['button_url']:
-                        view = discord.ui.View()
-                        view.add_item(discord.ui.Button(label=msg['button_label'], url=msg['button_url'], style=discord.ButtonStyle.link))
-                    await channel.send(embed=e, view=view)
-                except Exception as ex:
-                    print(f'Pending message error (id={msg["id"]}): {ex}')
-                finally:
-                    cur.execute("UPDATE pending_messages SET sent=TRUE WHERE id=%s", (msg['id'],))
+        # Send pending messages
+        for msg in messages:
+            channel = await get_channel(int(msg['channel_id']))
+            if not channel:
+                await loop.run_in_executor(_db_executor, _mark_message_sent_sync, msg['id'])
+                continue
+            try:
+                ed  = json.loads(msg['embed_json'])
+                cv  = ed.get('color','5865F2')
+                try: ci = int(cv) if str(cv).isdigit() else int(str(cv).lstrip('#'),16)
+                except: ci = 0x5865F2
+                e = discord.Embed(title=ed.get('title',''), description=ed.get('description',''), color=ci)
+                if ed.get('image_url'):     e.set_image(url=ed['image_url'])
+                if ed.get('thumbnail_url'): e.set_thumbnail(url=ed['thumbnail_url'])
+                ft, fi = ed.get('footer_text',''), ed.get('footer_icon','')
+                if ft: e.set_footer(text=ft, icon_url=fi) if fi else e.set_footer(text=ft)
+                if ed.get('author_name'):
+                    e.set_author(name=ed['author_name'], icon_url=ed['author_icon']) if ed.get('author_icon') else e.set_author(name=ed['author_name'])
+                view = None
+                if msg['button_label'] and msg['button_url']:
+                    view = discord.ui.View()
+                    view.add_item(discord.ui.Button(label=msg['button_label'], url=msg['button_url'], style=discord.ButtonStyle.link))
+                await channel.send(embed=e, view=view)
+            except Exception as ex:
+                print(f'Pending message error (id={msg["id"]}): {ex}')
+            await loop.run_in_executor(_db_executor, _mark_message_sent_sync, msg['id'])
 
-            # Pending role assignments
-            cur.execute("SELECT value FROM server_config WHERE key='guild_id'")
-            row = cur.fetchone()
-            if row and row['value']:
-                guild = bot.get_guild(int(row['value']))
-                if guild:
-                    cur.execute("SELECT * FROM pending_actions WHERE action_type='assign' AND done=FALSE LIMIT 5")
-                    for action in cur.fetchall():
-                        member = guild.get_member(int(action['user_id']))
-                        if member:
-                            try:
-                                if action['old_role_id']:
-                                    old_role = guild.get_role(int(action['old_role_id']))
-                                    if old_role: await member.remove_roles(old_role)
-                                cur.execute("SELECT role_id FROM houses WHERE name=%s", (action['house_name'],))
-                                house = cur.fetchone()
-                                if house and house['role_id']:
-                                    new_role = guild.get_role(int(house['role_id']))
-                                    if new_role: await member.add_roles(new_role)
-                            except Exception as ex:
-                                print(f'Role assign error (user={action["user_id"]}): {ex}')
-                        cur.execute("UPDATE pending_actions SET done=TRUE WHERE id=%s", (action['id'],))
-        finally:
-            return_db(conn)
+        # Process pending role assignments
+        if guild_row and guild_row['value']:
+            guild = bot.get_guild(int(guild_row['value']))
+            if guild:
+                for action in actions:
+                    member = guild.get_member(int(action['user_id']))
+                    if member:
+                        try:
+                            if action['old_role_id']:
+                                old_role = guild.get_role(int(action['old_role_id']))
+                                if old_role: await member.remove_roles(old_role)
+                            house = await loop.run_in_executor(
+                                _db_executor, _get_house_role_sync, action['house_name'])
+                            if house and house['role_id']:
+                                new_role = guild.get_role(int(house['role_id']))
+                                if new_role: await member.add_roles(new_role)
+                        except Exception as ex:
+                            print(f'Role assign error (user={action["user_id"]}): {ex}')
+                    await loop.run_in_executor(_db_executor, _mark_action_done_sync, action['id'])
+
     except Exception as ex:
         print(f'process_pending error: {ex}')
 
@@ -296,7 +353,7 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    cfg            = get_cfg()
+    cfg            = await get_cfg_async()
     auto_house_cfg = cfg.get('auto_assign_house','').strip().lower()
     resolved_house = None
 
@@ -352,7 +409,7 @@ async def on_message(message):
         _handled_messages.clear()
 
     if not message.author.bot:
-        cfg = get_cfg()
+        cfg = await get_cfg_async()
 
         # XP per message
         if cfg.get('xp_enabled') == '1':
