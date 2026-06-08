@@ -1,32 +1,27 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-import os, json, functools, secrets, requests as http_requests
+import os, json, functools, secrets, hmac, hashlib, time, requests as http_requests
 import psycopg2, psycopg2.extras
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
-# SESSION_SECRET must be a stable random string set as a Vercel env var.
-# If it rotates between deployments the cookie is invalidated and everyone
-# gets logged out — that is fine, but it must NOT change within a deploy.
+# SESSION_SECRET must be set as a Vercel env var — a stable random string.
 app.secret_key = os.environ.get('SESSION_SECRET', 'CHANGE_ME_IN_ENV')
 
-# SameSite=Lax works for same-domain redirects (housewars.vercel.app → discord → housewars.vercel.app).
-# SameSite=None would need Secure=True on every response, which Vercel handles,
-# but Lax is simpler and correct here since there is no cross-site iframe use.
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE']   = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 DISCORD_CLIENT_ID     = os.environ.get('DISCORD_CLIENT_ID', '')
 DISCORD_CLIENT_SECRET = os.environ.get('DISCORD_CLIENT_SECRET', '')
-DISCORD_REDIRECT_URI  = os.environ.get('DISCORD_REDIRECT_URI', '')  # https://housewars.vercel.app/auth/discord/callback
+DISCORD_REDIRECT_URI  = os.environ.get('DISCORD_REDIRECT_URI', '')
 DISCORD_GUILD_ID      = os.environ.get('DISCORD_GUILD_ID', '')
 DISCORD_BOT_TOKEN     = os.environ.get('DISCORD_TOKEN', '')
 
 DISCORD_API = 'https://discord.com/api/v10'
 
 # ---------------------------------------------------------------------------
-# DB helpers
+# DB
 # ---------------------------------------------------------------------------
 def db():
     conn = psycopg2.connect(os.environ['SUPABASE_URL'], cursor_factory=psycopg2.extras.RealDictCursor)
@@ -34,48 +29,40 @@ def db():
     return conn
 
 # ---------------------------------------------------------------------------
-# OAuth nonce helpers  (stored in DB so Vercel serverless instances share state)
+# OAuth state — HMAC signed, no DB required.
+#
+# Format:  <timestamp_seconds>.<random>.<hmac_hex>
+# Works perfectly across all Vercel serverless instances because it only
+# depends on SESSION_SECRET (shared env var), not any in-memory or DB state.
+# Expires after 10 minutes to limit replay window.
 # ---------------------------------------------------------------------------
-def _ensure_nonce_table(cur):
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS oauth_nonces (
-            key        TEXT PRIMARY KEY,
-            created_at TIMESTAMPTZ DEFAULT now()
-        )
-    """)
+_OAUTH_HMAC_KEY = (os.environ.get('SESSION_SECRET', 'CHANGE_ME_IN_ENV') + '_oauth').encode()
 
-def _make_nonce():
-    nonce = secrets.token_urlsafe(24)
-    try:
-        conn = db()
-        cur  = conn.cursor()
-        _ensure_nonce_table(cur)
-        cur.execute("DELETE FROM oauth_nonces WHERE created_at < now() - interval '10 minutes'")
-        cur.execute("INSERT INTO oauth_nonces (key) VALUES (%s) ON CONFLICT DO NOTHING", (nonce,))
-        conn.close()
-    except Exception as e:
-        print(f'_make_nonce error: {e}')
-        nonce = 'stateless'   # fall back to no CSRF check rather than breaking login
-    return nonce
+def _make_state():
+    ts    = str(int(time.time()))
+    rand  = secrets.token_hex(16)
+    msg   = f'{ts}.{rand}'.encode()
+    sig   = hmac.new(_OAUTH_HMAC_KEY, msg, hashlib.sha256).hexdigest()
+    return f'{ts}.{rand}.{sig}'
 
-def _consume_nonce(state):
-    """Returns True if the nonce is valid (and deletes it). Always returns True for 'stateless'."""
-    if not state or state == 'stateless':
-        return True
+def _verify_state(state: str) -> bool:
+    if not state:
+        return False
+    parts = state.split('.')
+    if len(parts) != 3:
+        return False
+    ts, rand, sig = parts
+    # Check expiry (10 minutes)
     try:
-        conn = db()
-        cur  = conn.cursor()
-        _ensure_nonce_table(cur)
-        cur.execute(
-            "DELETE FROM oauth_nonces WHERE key=%s AND created_at > now() - interval '10 minutes' RETURNING key",
-            (state,)
-        )
-        row = cur.fetchone()
-        conn.close()
-        return row is not None
-    except Exception as e:
-        print(f'_consume_nonce error: {e}')
-        return True   # allow through on DB error rather than locking everyone out
+        if int(time.time()) - int(ts) > 600:
+            print('OAuth state expired')
+            return False
+    except ValueError:
+        return False
+    # Verify signature
+    msg      = f'{ts}.{rand}'.encode()
+    expected = hmac.new(_OAUTH_HMAC_KEY, msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, sig)
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -91,13 +78,13 @@ def login_required(f):
 def _discord_oauth_url():
     if not DISCORD_CLIENT_ID or not DISCORD_REDIRECT_URI:
         return None
-    nonce  = _make_nonce()
+    state  = _make_state()
     params = (
         f"?client_id={DISCORD_CLIENT_ID}"
         f"&redirect_uri={DISCORD_REDIRECT_URI}"
         f"&response_type=code"
         f"&scope=identify%20guilds"
-        f"&state={nonce}"
+        f"&state={state}"
     )
     return f"https://discord.com/api/oauth2/authorize{params}"
 
@@ -180,7 +167,7 @@ def auth_discord_callback():
         print(f'Discord OAuth denied or missing code: error={error}')
         return redirect(url_for('login'))
 
-    if not _consume_nonce(state):
+    if not _verify_state(state):
         print(f'Invalid/expired OAuth nonce: {state}')
         return redirect(url_for('login'))
 
