@@ -609,3 +609,14 @@ def api_delete_template(tid):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+@app.route('/auth/discord/debug')
+def auth_discord_debug():
+    return jsonify({
+        'client_id_set':     bool(DISCORD_CLIENT_ID),
+        'client_secret_set': bool(DISCORD_CLIENT_SECRET),
+        'redirect_uri':      DISCORD_REDIRECT_URI,
+        'guild_id_set':      bool(DISCORD_GUILD_ID),
+        'bot_token_set':     bool(DISCORD_BOT_TOKEN),
+        'session_secret_set': app.secret_key != 'CHANGE_ME_IN_ENV',
+    })
